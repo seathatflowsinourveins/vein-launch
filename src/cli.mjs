@@ -13,6 +13,12 @@ if (args.includes("--eval") || args.includes("--eval-mode")) {
   process.exit(0);
 }
 
+if (args.includes("--manifest")) {
+  const { printManifest } = await import("./lib/manifest.mjs");
+  const code = await printManifest();
+  process.exit(code);
+}
+
 orchestrate(args)
   .then((code) => process.exit(code))
   .catch((err) => {
