@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock node:fs/promises for file I/O
@@ -5,10 +7,11 @@ vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
+  mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
-const { readFile, appendFile } = await import("node:fs/promises");
-const { evaluateGate } = await import("../../tools/eval_gate.mjs");
+const { readFile, appendFile, mkdir } = await import("node:fs/promises");
+const { evaluateGate, defaultHistoryPath } = await import("../../tools/eval_gate.mjs");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -361,5 +364,40 @@ describe("evaluateGate", () => {
 
     expect(result.status).toBe("BLOCK");
     expect(result.exitCode).toBe(2);
+  });
+
+  // ---- Wave 10.5-B: default path resolves to ~/.vein/eval-history/<project>.jsonl ----
+
+  it("default path resolves to ~/.vein/eval-history/<project>.jsonl", () => {
+    const project = basename(process.cwd())
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-");
+    const expected = join(homedir(), ".vein", "eval-history", `${project}.jsonl`);
+    expect(defaultHistoryPath()).toBe(expected);
+  });
+
+  // ---- Wave 10.5-B: creates parent directory before appending ----
+
+  it("creates parent directory if missing before appending history entry", async () => {
+    readFile.mockImplementation(async (path) => {
+      if (path === COMMIT_MSG_PATH) return "feat: dircheck\n";
+      if (path === HISTORY_PATH) return "";
+      throw new Error(`Unexpected read: ${path}`);
+    });
+
+    await evaluateGate({
+      commitMsgPath: COMMIT_MSG_PATH,
+      historyPath: HISTORY_PATH,
+      testRunner: makeTestRunner(makeVitestResult({ numPassedTests: 100, numTotalTests: 100 })),
+      gitSha: fakeGitSha,
+    });
+
+    // mkdir must be called with the parent dir and { recursive: true }
+    expect(mkdir).toHaveBeenCalledOnce();
+    const [dirArg, optsArg] = mkdir.mock.calls[0];
+    expect(dirArg).toContain("tmp"); // /tmp is the parent of HISTORY_PATH
+    expect(optsArg).toEqual({ recursive: true });
+    // appendFile still happens after mkdir
+    expect(appendFile).toHaveBeenCalledOnce();
   });
 });

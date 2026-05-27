@@ -19,3 +19,5 @@ ruvector.db
 CLAUDE.local.md
 agent-orchestrator.yaml
 .ao/
+# Wave 10.5: eval-history relocated to ~/.vein/eval-history/
+docs/eval-history.jsonl

@@ -10,8 +10,9 @@
  */
 
 import { execFile } from "node:child_process";
-import { appendFile, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -19,8 +20,39 @@ const execFileAsync = promisify(execFile);
 /** Regression band in percentage points — block when drop exceeds this value */
 const REGRESSION_BAND_PP = 5;
 
-/** Default path to the eval history log (cross-platform — fileURLToPath strips leading / on Windows) */
-const DEFAULT_HISTORY_PATH = fileURLToPath(new URL("../docs/eval-history.jsonl", import.meta.url));
+/**
+ * Resolve the per-project eval-history path outside the repo.
+ *
+ * WHY outside-repo:
+ *   1. Recursion guard — the eval-gate hook APPENDs to this file on every
+ *      commit, which makes `docs/eval-history.jsonl` permanently dirty in git.
+ *      Keeping it in the repo creates an infinite "modified" loop.
+ *   2. Tamper resistance — a file tracked by git could be deleted or reset to
+ *      get a free first-run pass. An external path under ~/.vein/ is not
+ *      affected by `git clean`, `git checkout`, or worktree operations.
+ *
+ * Pattern: ~/.vein/eval-history/<project>.jsonl
+ *   <project> = basename(cwd), lowercased, alphanumeric+hyphens only.
+ *
+ * @returns {string}
+ */
+export function defaultHistoryPath() {
+  const project = basename(process.cwd())
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-");
+  return join(homedir(), ".vein", "eval-history", `${project}.jsonl`);
+}
+
+/**
+ * Ensure the parent directory of historyPath exists.
+ * Safe to call repeatedly — mkdir with { recursive: true } is idempotent.
+ *
+ * @param {string} historyPath
+ * @returns {Promise<void>}
+ */
+async function ensureHistoryDir(historyPath) {
+  await mkdir(dirname(historyPath), { recursive: true });
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,7 +180,7 @@ async function defaultGitSha() {
  */
 export async function evaluateGate({
   commitMsgPath,
-  historyPath = DEFAULT_HISTORY_PATH,
+  historyPath = defaultHistoryPath(),
   testRunner = defaultTestRunner,
   gitSha = defaultGitSha,
 }) {
@@ -209,7 +241,8 @@ export async function evaluateGate({
     entry.overrideReason = overrideRationale;
   }
 
-  // 7. Append to history (one JSONL line)
+  // 7. Append to history (one JSONL line) — ensure parent dir exists first
+  await ensureHistoryDir(historyPath);
   await appendFile(historyPath, JSON.stringify(entry) + "\n", "utf8");
 
   /** @type {GateResult} */
