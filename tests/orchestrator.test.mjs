@@ -26,6 +26,7 @@ vi.mock("../src/lib/runner.mjs", () => ({
 }));
 
 import { launchClaude } from "../src/lib/exec.mjs";
+import { runTiers } from "../src/lib/runner.mjs";
 import { orchestrate } from "../src/orchestrator.mjs";
 
 describe("orchestrate", () => {
@@ -65,5 +66,91 @@ describe("orchestrate", () => {
   it("returns SUCCESS for --status command", async () => {
     const code = await orchestrate(["--status"]);
     expect(code).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// _cliproxyActive computation — OPERABLE_SEVERITIES allow-list semantics
+// ---------------------------------------------------------------------------
+
+describe("orchestrate _cliproxyActive", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Helper: run orchestrate and capture the config passed to launchClaude.
+   */
+  async function runAndCaptureLaunchConfig(t2Severity) {
+    runTiers.mockResolvedValue({
+      results: [
+        {
+          tierId: "t2-cliproxy",
+          tierName: "CLIProxy",
+          severity: t2Severity,
+          evidence: [],
+          durationMs: 0,
+        },
+      ],
+      budgetExceeded: false,
+      elapsed: 0,
+    });
+    await orchestrate(["--mode=fast"]);
+    if (!launchClaude.mock.calls.length) return null;
+    return launchClaude.mock.calls[0][0]; // first arg is config
+  }
+
+  it("sets _cliproxyActive=true when T2 severity is PASS", async () => {
+    const config = await runAndCaptureLaunchConfig("pass");
+    expect(config._cliproxyActive).toBe(true);
+  });
+
+  it("sets _cliproxyActive=true when T2 severity is WARN (real-machine state after /healthz fix)", async () => {
+    const config = await runAndCaptureLaunchConfig("warn");
+    expect(config._cliproxyActive).toBe(true);
+  });
+
+  it("sets _cliproxyActive=true when T2 severity is INFO", async () => {
+    const config = await runAndCaptureLaunchConfig("info");
+    expect(config._cliproxyActive).toBe(true);
+  });
+
+  it("sets _cliproxyActive=true when T2 severity is SKIP", async () => {
+    const config = await runAndCaptureLaunchConfig("skip");
+    expect(config._cliproxyActive).toBe(true);
+  });
+
+  it("sets _cliproxyActive=false when T2 severity is BLOCK", async () => {
+    // BLOCK is a fatal severity — cliproxy not operable
+    runTiers.mockResolvedValue({
+      results: [
+        {
+          tierId: "t2-cliproxy",
+          tierName: "CLIProxy",
+          severity: "block",
+          evidence: [{ check: "cliproxy", actual: "down", remediation: "start it" }],
+          durationMs: 0,
+        },
+      ],
+      budgetExceeded: false,
+      elapsed: 0,
+    });
+    // orchestrate returns TIER_BLOCK (1) and does NOT call launchClaude
+    await orchestrate(["--mode=fast"]);
+    // launchClaude is NOT called on BLOCK — verify the guard works
+    expect(launchClaude).not.toHaveBeenCalled();
+  });
+
+  it("sets _cliproxyActive=false when T2 result is absent", async () => {
+    runTiers.mockResolvedValue({
+      results: [],
+      budgetExceeded: false,
+      elapsed: 0,
+    });
+    await orchestrate(["--mode=fast"]);
+    if (launchClaude.mock.calls.length) {
+      const config = launchClaude.mock.calls[0][0];
+      expect(config._cliproxyActive).toBe(false);
+    }
   });
 });

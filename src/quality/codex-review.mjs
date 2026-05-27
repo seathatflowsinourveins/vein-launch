@@ -1,14 +1,21 @@
 /**
  * Codex review integration — invokes GPT-5.5 Codex review on code changes.
  *
+ * Security: model and effort values are passed as discrete -c flag arguments via execArgs
+ * (shell:false), not interpolated into a shell string. This prevents injection even if a
+ * caller supplies a model name containing shell metacharacters.
+ *
  * @typedef {{ severity: "blocker"|"warning"|"info", file: string, line: number|null, message: string }} Finding
  * @typedef {{ ok: boolean, findings: Finding[], blockers: number, warnings: number, duration: number }} CodexReviewResult
  */
 
-import { exec } from "../lib/shell.mjs";
+import { execArgs } from "../lib/shell.mjs";
 
 /**
  * Run GPT-5.5 Codex review on the current working tree changes.
+ *
+ * Codex CLI: `codex review -c model=<model> -c effort=<effort>`
+ * The `-c key=value` form sets config overrides without shell expansion.
  *
  * @param {{ model?: string, effort?: string, timeout?: number }} options
  * @returns {Promise<CodexReviewResult>}
@@ -16,7 +23,14 @@ import { exec } from "../lib/shell.mjs";
 export async function runCodexReview(options = {}) {
   const { model = "gpt-5.5", effort = "xhigh", timeout = 120_000 } = options;
   const start = performance.now();
-  const result = await exec(`codex --review --model ${model} --effort ${effort}`, { timeout });
+
+  // execArgs passes each element as a discrete argument — shell:false (default).
+  const result = await execArgs(
+    "codex",
+    ["review", "-c", `model="${model}"`, "-c", `effort="${effort}"`],
+    { timeout },
+  );
+
   const findings = result.ok ? parseCodexOutput(result.stdout) : [];
   const blockers = findings.filter((f) => f.severity === "blocker").length;
   const warnings = findings.filter((f) => f.severity === "warning").length;

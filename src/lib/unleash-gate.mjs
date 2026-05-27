@@ -10,14 +10,19 @@
  */
 
 /**
- * Allow-list of severities that count as operable for the bypass auto-gate.
+ * Allow-list of severities that count as operable for the bypass auto-gate
+ * and for the _cliproxyActive flag in the orchestrator.
  *
  * Deliberately an allow-list (not a deny-list of fatal severities) so that
  * malformed or missing severity values fail closed. With a deny-list,
  * `String(null).toLowerCase()` would yield "null" — not in the fatal set,
  * so a tier with a missing severity would silently pass.
+ *
+ * Exported so the orchestrator can reuse the same semantics for the
+ * _cliproxyActive computation (PASS | INFO | WARN | SKIP → operable;
+ * BLOCK | ERROR → not operable).
  */
-const OPERABLE_SEVERITIES = new Set(["pass", "info", "warn", "skip"]);
+export const OPERABLE_SEVERITIES = new Set(["pass", "info", "warn", "skip"]);
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
