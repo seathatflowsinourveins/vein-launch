@@ -18,6 +18,8 @@ commit-msg:
   commands:
     commitlint:
       run: npx commitlint --edit {1}
+    eval-gate:
+      run: node tools/eval_gate.mjs {1}
 
 pre-push:
   parallel: true

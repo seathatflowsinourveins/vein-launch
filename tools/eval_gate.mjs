@@ -1,0 +1,237 @@
+/**
+ * eval_gate.mjs — Wave 10-A eval regression gate
+ *
+ * Usage (hook):  node tools/eval_gate.mjs <commit-msg-file>
+ * Exit codes:    0 = pass, 2 = blocked
+ *
+ * Programmatic API:
+ *   import { evaluateGate } from "./tools/eval_gate.mjs";
+ *   const result = await evaluateGate({ commitMsgPath, historyPath, testRunner, gitSha });
+ */
+
+import { execFile } from "node:child_process";
+import { appendFile, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
+/** Regression band in percentage points — block when drop exceeds this value */
+const REGRESSION_BAND_PP = 5;
+
+/** Default path to the eval history log (cross-platform — fileURLToPath strips leading / on Windows) */
+const DEFAULT_HISTORY_PATH = fileURLToPath(new URL("../docs/eval-history.jsonl", import.meta.url));
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Read and parse the last non-empty JSONL line from historyPath.
+ * Returns null when the file is missing or empty.
+ * Returns { warning, baseline: null } on parse errors.
+ *
+ * @param {string} path
+ * @returns {Promise<{ baseline: object | null, warning?: string }>}
+ */
+async function readLastBaseline(path) {
+  let raw;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return { baseline: null };
+    throw err;
+  }
+
+  const lines = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return { baseline: null };
+
+  // Walk from the end to find the last parseable line
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(lines[i]);
+      return { baseline: parsed };
+    } catch {
+      // continue to previous line
+    }
+  }
+
+  return { baseline: null, warning: "History file could not be parsed — treating as first run" };
+}
+
+/**
+ * Extract the OVERRIDE-EVAL-REGRESSION trailer value from a commit message.
+ * Returns the rationale string if present and non-empty, otherwise null.
+ *
+ * @param {string} msg
+ * @returns {string | null}
+ */
+function extractOverrideRationale(msg) {
+  const match = msg.match(/^OVERRIDE-EVAL-REGRESSION:\s*(.+)$/m);
+  if (!match) return null;
+  const rationale = match[1].trim();
+  return rationale.length > 0 ? rationale : null;
+}
+
+/**
+ * Default test runner: spawns `npx vitest run --reporter=json` and parses stdout.
+ *
+ * @returns {Promise<{ numPassedTests: number, numTotalTests: number }>}
+ */
+async function defaultTestRunner() {
+  const { stdout } = await execFileAsync("npx", ["vitest", "run", "--reporter=json"], {
+    shell: true,
+  });
+  // vitest --reporter=json may emit some lines before the JSON blob
+  const jsonStart = stdout.indexOf("{");
+  if (jsonStart === -1) throw new Error("vitest --reporter=json produced no JSON output");
+  return JSON.parse(stdout.slice(jsonStart));
+}
+
+/**
+ * Default git SHA resolver: reads HEAD via `git rev-parse --short HEAD`.
+ *
+ * @returns {Promise<string>}
+ */
+async function defaultGitSha() {
+  const { stdout } = await execFileAsync("git", ["rev-parse", "--short", "HEAD"], { shell: true });
+  return stdout.trim();
+}
+
+// ---------------------------------------------------------------------------
+// Core logic
+// ---------------------------------------------------------------------------
+
+/**
+ * @typedef {Object} GateResult
+ * @property {"PASS"|"BLOCK"|"OVERRIDE"} status
+ * @property {number} exitCode  0 or 2
+ * @property {number} score     passingTests / totalTests * 100
+ * @property {string} [overrideReason]
+ * @property {string} [warning]
+ */
+
+/**
+ * Evaluate whether the current test run passes the regression gate.
+ *
+ * @param {{
+ *   commitMsgPath: string,
+ *   historyPath?: string,
+ *   testRunner?: () => Promise<{ numPassedTests: number, numTotalTests: number }>,
+ *   gitSha?: () => Promise<string>,
+ * }} opts
+ * @returns {Promise<GateResult>}
+ */
+export async function evaluateGate({
+  commitMsgPath,
+  historyPath = DEFAULT_HISTORY_PATH,
+  testRunner = defaultTestRunner,
+  gitSha = defaultGitSha,
+}) {
+  // 1. Read commit message and extract override trailer
+  const commitMsg = await readFile(commitMsgPath, "utf8");
+  const overrideRationale = extractOverrideRationale(commitMsg);
+
+  // 2. Read baseline from history
+  const { baseline, warning } = await readLastBaseline(historyPath);
+
+  // 3. Run tests
+  const testResult = await testRunner();
+  const { numPassedTests, numTotalTests } = testResult;
+  const score = numTotalTests > 0 ? (numPassedTests / numTotalTests) * 100 : 0;
+
+  // 4. Resolve git sha
+  const commit = await gitSha();
+
+  // 5. Determine status
+  let status;
+  let exitCode;
+
+  if (warning !== undefined || baseline === null) {
+    // First-run or parse error → always pass
+    status = "PASS";
+    exitCode = 0;
+  } else {
+    const drop = baseline.score - score;
+    if (drop <= REGRESSION_BAND_PP) {
+      status = "PASS";
+      exitCode = 0;
+    } else if (overrideRationale !== null) {
+      status = "OVERRIDE";
+      exitCode = 0;
+    } else {
+      status = "BLOCK";
+      exitCode = 2;
+    }
+  }
+
+  // 6. Build history entry
+  /** @type {object} */
+  const entry = {
+    timestamp: new Date().toISOString(),
+    commit,
+    score,
+    totalTests: numTotalTests,
+    passing: numPassedTests,
+    status,
+  };
+
+  if (status === "OVERRIDE" && overrideRationale !== null) {
+    entry.overrideReason = overrideRationale;
+  }
+
+  // 7. Append to history (one JSONL line)
+  await appendFile(historyPath, JSON.stringify(entry) + "\n", "utf8");
+
+  /** @type {GateResult} */
+  const result = { status, exitCode, score };
+  if (status === "OVERRIDE") result.overrideReason = overrideRationale ?? undefined;
+  if (warning !== undefined) result.warning = warning;
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// CLI entry point
+// ---------------------------------------------------------------------------
+
+// Guard: only run as main module
+const isMain =
+  process.argv[1] !== undefined &&
+  new URL(import.meta.url).pathname.endsWith(
+    process.argv[1].replace(/\\/g, "/").split("/").pop() ?? "",
+  );
+
+if (isMain || process.argv[1]?.endsWith("eval_gate.mjs")) {
+  const commitMsgPath = process.argv[2];
+  if (!commitMsgPath) {
+    process.stderr.write("Usage: node tools/eval_gate.mjs <commit-msg-file>\n");
+    process.exit(1);
+  }
+
+  try {
+    const result = await evaluateGate({ commitMsgPath });
+
+    if (result.status === "BLOCK") {
+      process.stderr.write(
+        `[eval-gate] BLOCKED: score ${result.score.toFixed(1)}pp dropped more than ${REGRESSION_BAND_PP}pp below baseline.\n`,
+      );
+    } else if (result.status === "OVERRIDE") {
+      process.stdout.write(`[eval-gate] OVERRIDE accepted: ${result.overrideReason}\n`);
+    } else {
+      if (result.warning) {
+        process.stderr.write(`[eval-gate] WARNING: ${result.warning}\n`);
+      }
+      process.stdout.write(`[eval-gate] PASS: score ${result.score.toFixed(1)}pp\n`);
+    }
+
+    process.exit(result.exitCode);
+  } catch (err) {
+    process.stderr.write(`[eval-gate] ERROR: ${err.message}\n`);
+    process.exit(1);
+  }
+}
