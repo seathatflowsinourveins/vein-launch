@@ -10,6 +10,7 @@
  */
 
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -31,16 +32,23 @@ const REGRESSION_BAND_PP = 5;
  *      get a free first-run pass. An external path under ~/.vein/ is not
  *      affected by `git clean`, `git checkout`, or worktree operations.
  *
- * Pattern: ~/.vein/eval-history/<project>.jsonl
- *   <project> = basename(cwd), lowercased, alphanumeric+hyphens only.
+ * Pattern: ~/.vein/eval-history/<slug>-<cwd-hash>.jsonl
+ *   <slug>     = basename(cwd) normalized (lowercase, [a-z0-9-]+, ≤80 chars,
+ *                falls back to "project" when basename has no safe chars).
+ *   <cwd-hash> = first 8 hex chars of sha256(process.cwd()) — disambiguates
+ *                worktrees and similarly-named projects that share a slug.
  *
  * @returns {string}
  */
 export function defaultHistoryPath() {
-  const project = basename(process.cwd())
+  const raw = basename(process.cwd())
     .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-");
-  return join(homedir(), ".vein", "eval-history", `${project}.jsonl`);
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  const slug = raw || "project";
+  const hash = createHash("sha256").update(process.cwd()).digest("hex").slice(0, 8);
+  return join(homedir(), ".vein", "eval-history", `${slug}-${hash}.jsonl`);
 }
 
 /**

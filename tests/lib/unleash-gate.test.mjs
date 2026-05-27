@@ -285,4 +285,39 @@ describe("configPhase=bypass", () => {
     expect(result.phase).toBe("bypass");
     expect(result.downgraded).toBe(false);
   });
+
+  // ---- Wave 10.5 review: allow-list fails closed on null/undefined/unknown severity ----
+
+  it("rejects run containing a tier with null severity (fails closed)", async () => {
+    await writeRun("null-sev.json", {
+      results: Array.from({ length: 6 }, (_, i) => ({ tier: `t${i}`, severity: "pass" })).concat([
+        { tier: "t6", severity: null },
+      ]),
+    });
+    const result = await resolveUnleashPhase({ configPhase: "bypass", runsDir: tmpDir });
+    expect(result.phase).toBe("allow-populated");
+    expect(result.downgraded).toBe(true);
+  });
+
+  it("rejects run containing a tier with undefined severity (missing field)", async () => {
+    await writeRun("missing-sev.json", {
+      results: Array.from({ length: 6 }, (_, i) => ({ tier: `t${i}`, severity: "pass" })).concat([
+        { tier: "t6" }, // severity field omitted entirely
+      ]),
+    });
+    const result = await resolveUnleashPhase({ configPhase: "bypass", runsDir: tmpDir });
+    expect(result.phase).toBe("allow-populated");
+    expect(result.downgraded).toBe(true);
+  });
+
+  it("rejects run containing a tier with unknown severity string", async () => {
+    await writeRun("unknown-sev.json", {
+      results: Array.from({ length: 6 }, (_, i) => ({ tier: `t${i}`, severity: "pass" })).concat([
+        { tier: "t6", severity: "mystery" },
+      ]),
+    });
+    const result = await resolveUnleashPhase({ configPhase: "bypass", runsDir: tmpDir });
+    expect(result.phase).toBe("allow-populated");
+    expect(result.downgraded).toBe(true);
+  });
 });

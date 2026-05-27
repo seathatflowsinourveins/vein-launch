@@ -366,14 +366,33 @@ describe("evaluateGate", () => {
     expect(result.exitCode).toBe(2);
   });
 
-  // ---- Wave 10.5-B: default path resolves to ~/.vein/eval-history/<project>.jsonl ----
+  // ---- Wave 10.5-B: default path resolves to ~/.vein/eval-history/<slug>-<hash>.jsonl ----
 
-  it("default path resolves to ~/.vein/eval-history/<project>.jsonl", () => {
-    const project = basename(process.cwd())
+  it("default path resolves to ~/.vein/eval-history/<slug>-<cwd-hash>.jsonl", async () => {
+    const { createHash } = await import("node:crypto");
+    const raw = basename(process.cwd())
       .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "-");
-    const expected = join(homedir(), ".vein", "eval-history", `${project}.jsonl`);
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+    const slug = raw || "project";
+    const hash = createHash("sha256").update(process.cwd()).digest("hex").slice(0, 8);
+    const expected = join(homedir(), ".vein", "eval-history", `${slug}-${hash}.jsonl`);
     expect(defaultHistoryPath()).toBe(expected);
+  });
+
+  // ---- Wave 10.5 review: slug edge case — empty/all-special chars falls back to "project" ----
+
+  it("default path uses 'project' fallback when basename has no safe chars", async () => {
+    const { createHash } = await import("node:crypto");
+    const spy = vi.spyOn(process, "cwd").mockReturnValue("/tmp/!!!@@@");
+    try {
+      const hash = createHash("sha256").update("/tmp/!!!@@@").digest("hex").slice(0, 8);
+      const expected = join(homedir(), ".vein", "eval-history", `project-${hash}.jsonl`);
+      expect(defaultHistoryPath()).toBe(expected);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   // ---- Wave 10.5-B: creates parent directory before appending ----

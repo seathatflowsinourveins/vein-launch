@@ -9,8 +9,15 @@
  * curated allow-list in .claude/settings.json.
  */
 
-/** Severities that indicate a fatal precheck failure and disqualify a run. */
-const FATAL_SEVERITIES = ["block", "error"];
+/**
+ * Allow-list of severities that count as operable for the bypass auto-gate.
+ *
+ * Deliberately an allow-list (not a deny-list of fatal severities) so that
+ * malformed or missing severity values fail closed. With a deny-list,
+ * `String(null).toLowerCase()` would yield "null" — not in the fatal set,
+ * so a tier with a missing severity would silently pass.
+ */
+const OPERABLE_SEVERITIES = new Set(["pass", "info", "warn", "skip"]);
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -36,7 +43,6 @@ export async function resolveUnleashPhase({ configPhase, runsDir, project }) {
 }
 
 async function checkQualifyingRun(runsDir, project) {
-  const FATAL = new Set(FATAL_SEVERITIES);
   try {
     const entries = await readdir(runsDir);
     for (const name of entries) {
@@ -57,7 +63,7 @@ async function checkQualifyingRun(runsDir, project) {
         if (
           tiers &&
           tiers.length >= 7 &&
-          tiers.every((r) => !FATAL.has(String(r.severity).toLowerCase()))
+          tiers.every((r) => OPERABLE_SEVERITIES.has(String(r?.severity ?? "").toLowerCase()))
         ) {
           return true;
         }
