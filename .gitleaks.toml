@@ -1,0 +1,9 @@
+title = "vein-launch gitleaks config"
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+  '''node_modules''',
+  '''\.git''',
+  '''tests/fixtures''',
+]

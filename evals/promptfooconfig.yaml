@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: "vein-launch precheck evaluation"
+
+providers:
+  - id: "exec: node ../src/orchestrator.mjs --eval-mode"
+    label: "vein-precheck"
+
+prompts:
+  - "{{scenario}}"
+
+defaultTest:
+  options:
+    timeout: 30000
+
+tests:
+  - description: "Fast mode runs T0-T3 only"
+    vars:
+      scenario: "--mode=fast"
+    assert:
+      - type: contains
+        value: "T0"
+      - type: contains
+        value: "T1"
+      - type: not-contains
+        value: "T4"
+
+  - description: "Deep mode runs all tiers"
+    vars:
+      scenario: "--mode=deep"
+    assert:
+      - type: contains
+        value: "T0"
+      - type: contains
+        value: "T4"
+      - type: contains
+        value: "T5"
+
+  - description: "Exit code 0 on all-pass"
+    vars:
+      scenario: "--mode=fast"
+    assert:
+      - type: javascript
+        value: "!output.includes('✗')"
+
+  - description: "Invalid mode exits with error"
+    vars:
+      scenario: "--mode=invalid"
+    assert:
+      - type: contains
+        value: "Invalid"

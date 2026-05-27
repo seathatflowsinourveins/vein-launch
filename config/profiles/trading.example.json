@@ -1,0 +1,26 @@
+{
+  "$schema": "../schema.json",
+  "project": "trading",
+  "mode": { "default": "deep" },
+  "cliproxy": {
+    "hosting": "docker",
+    "accounts": ["claude-1", "claude-2", "claude-3"],
+    "sessionAffinity": true
+  },
+  "quality": {
+    "codexReview": "every-stop",
+    "codexModel": "gpt-5.5",
+    "codexEffort": "xhigh",
+    "shipGate": true,
+    "testsRequired": true
+  },
+  "modelRouting": {
+    "default": "opus",
+    "subagents": "haiku",
+    "planning": "opusplan"
+  },
+  "docker": {
+    "composeFile": "docker-compose.yml",
+    "requiredServices": ["timescaledb", "redis", "cliproxy"]
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit(*)",
+      "Write(*)",
+      "Glob",
+      "Grep",
+      "Bash(node *)",
+      "Bash(npm test*)",
+      "Bash(npm run *)",
+      "Bash(npx biome *)",
+      "Bash(npx vitest *)",
+      "Bash(npx commitlint *)",
+      "Bash(git *)",
+      "Bash(mise *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(echo *)",
+      "Bash(test *)",
+      "Bash(which *)",
+      "Bash(pwd)"
+    ],
+    "deny": [],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(rmdir *)",
+      "Bash(npm install*)",
+      "Bash(npm publish*)",
+      "Bash(docker *)"
+    ]
+  },
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80"
+  },
+  "respectGitignore": true,
+  "enableAllProjectMcpServers": true,
+  "plansDirectory": "./agent_docs/plans",
+  "attribution": {
+    "commit": "Co-Authored-By: Claude <noreply@anthropic.com>",
+    "pr": "Generated with [Claude Code](https://claude.ai/code)"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PROJECT_DIR}/src/hooks/session-start.mjs",
+            "timeout": 5000,
+            "async": true,
+            "once": true,
+            "statusMessage": "SessionStart"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PROJECT_DIR}/src/hooks/stop-handler.mjs",
+            "timeout": 30000,
+            "async": true,
+            "statusMessage": "Quality gate"
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PROJECT_DIR}/src/hooks/teammate-idle.mjs",
+            "timeout": 60000,
+            "statusMessage": "Test gate"
+          }
+        ]
+      }
+    ]
+  }
+}

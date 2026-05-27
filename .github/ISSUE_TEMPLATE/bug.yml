@@ -1,0 +1,30 @@
+name: Bug Report
+description: Report a bug in vein-launch
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the issue
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+  - type: input
+    id: version
+    attributes:
+      label: vein-launch version
+      placeholder: "vein --version"
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "Windows 11 Pro"

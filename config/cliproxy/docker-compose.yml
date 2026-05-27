@@ -1,0 +1,22 @@
+name: cliproxy
+
+services:
+  cliproxy:
+    image: eceasy/cli-proxy-api:7.1.23
+    container_name: cliproxy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8317:8317"
+    volumes:
+      - ./config.yaml:/CLIProxyAPI/config.yaml:ro
+      - cliproxy-auth:/CLIProxyAPI/auth
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8317/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  cliproxy-auth:
+    name: cliproxy-auth-data

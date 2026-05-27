@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+.env.*.local
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.vein/
+.vitest/
+.swarm/
+ruvector.db
+*.db
+CLAUDE.local.md

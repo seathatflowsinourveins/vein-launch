@@ -1,0 +1,8 @@
+{
+  "description": "Shared hook configuration — team settings (git-tracked)",
+  "disableSessionStart": false,
+  "disableStopHandler": false,
+  "disableTeammateIdle": false,
+  "codexReviewOnStop": true,
+  "testGateOnTeammateIdle": true
+}

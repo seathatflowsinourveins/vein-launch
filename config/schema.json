@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/seath/vein-launch/config/schema.json",
+  "title": ".vein.json",
+  "description": "Per-project configuration for vein-launch",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "project": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Project identifier (lowercase, alphanumeric, hyphens)"
+    },
+    "mode": {
+      "type": "object",
+      "properties": {
+        "default": { "enum": ["fast", "deep"], "default": "fast" }
+      },
+      "additionalProperties": false
+    },
+    "cliproxy": {
+      "type": "object",
+      "properties": {
+        "hosting": { "enum": ["docker", "pm2"], "default": "pm2" },
+        "accounts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$",
+            "minLength": 1,
+            "maxLength": 63
+          },
+          "minItems": 1,
+          "maxItems": 10,
+          "uniqueItems": true
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 8317
+        },
+        "sessionAffinity": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "quality": {
+      "type": "object",
+      "properties": {
+        "codexReview": { "enum": ["every-stop", "on-pr", "disabled"], "default": "on-pr" },
+        "codexModel": { "type": "string", "default": "gpt-5.5" },
+        "codexEffort": { "enum": ["low", "medium", "high", "xhigh"], "default": "xhigh" },
+        "shipGate": { "type": "boolean", "default": true },
+        "testsRequired": { "type": "boolean", "default": true },
+        "promptfooGate": { "type": "boolean", "default": false },
+        "autonomousLoops": { "type": "boolean", "default": false },
+        "maxIterations": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 },
+        "convergenceThreshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.95 }
+      },
+      "additionalProperties": false
+    },
+    "modelRouting": {
+      "type": "object",
+      "properties": {
+        "default": { "type": "string", "default": "opus" },
+        "subagents": { "type": "string", "default": "haiku" },
+        "planning": { "type": "string", "default": "opusplan" }
+      },
+      "additionalProperties": false
+    },
+    "docker": {
+      "type": "object",
+      "properties": {
+        "composeFile": { "type": "string", "default": "docker-compose.yml" },
+        "requiredServices": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "agents": {
+      "type": "object",
+      "properties": {
+        "team": { "type": "string" },
+        "members": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 5
+        }
+      },
+      "additionalProperties": false
+    },
+    "env": {
+      "type": "object",
+      "description": "Additional environment variables to set before launching Claude. CANNOT override ANTHROPIC_API_KEY or PATH.",
+      "additionalProperties": { "type": "string" },
+      "not": {
+        "anyOf": [
+          { "required": ["ANTHROPIC_API_KEY"] },
+          { "required": ["PATH"] },
+          { "required": ["HOME"] },
+          { "required": ["USERPROFILE"] }
+        ]
+      }
+    }
+  },
+  "required": ["project"],
+  "additionalProperties": false
+}

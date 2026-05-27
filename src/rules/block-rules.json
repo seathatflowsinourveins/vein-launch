@@ -1,0 +1,68 @@
+{
+  "$schema": "../../config/schema.json",
+  "rules": [
+    {
+      "id": "B1",
+      "name": "leaked-credential",
+      "trigger": "Gitleaks detects credential in tracked/staged file",
+      "severity": "block",
+      "tiers": ["t1-env"],
+      "remediation": "gitleaks protect --staged --redact",
+      "autoRepair": false
+    },
+    {
+      "id": "B4",
+      "name": "docker-daemon-down",
+      "trigger": "Docker daemon unreachable when .vein.json requires docker hosting",
+      "severity": "block",
+      "tiers": ["t2-cliproxy"],
+      "remediation": "Start Docker Desktop",
+      "autoRepair": false
+    },
+    {
+      "id": "B5",
+      "name": "cliproxy-unhealthy",
+      "trigger": "CLIProxy health endpoint fails 3 consecutive times",
+      "severity": "block",
+      "tiers": ["t2-cliproxy"],
+      "remediation": "vein --repair",
+      "autoRepair": true
+    },
+    {
+      "id": "B6",
+      "name": "zero-accounts",
+      "trigger": "No active CLIProxy accounts configured",
+      "severity": "block",
+      "tiers": ["t2-cliproxy"],
+      "remediation": "vein --accounts add",
+      "autoRepair": false
+    },
+    {
+      "id": "B7",
+      "name": "github-auth-expired",
+      "trigger": "GitHub CLI auth expired or missing required scopes (repo, workflow, security_events)",
+      "severity": "block",
+      "tiers": ["t4-github"],
+      "remediation": "gh auth login --scopes repo,workflow,security_events",
+      "autoRepair": false
+    },
+    {
+      "id": "B9",
+      "name": "mcp-version-drift",
+      "trigger": "Critical MCP server has major version mismatch vs pin",
+      "severity": "block",
+      "tiers": ["t5-drift"],
+      "remediation": "npm install -g <pkg>@<pinned-version>",
+      "autoRepair": true
+    },
+    {
+      "id": "B10",
+      "name": "action-sha-floating",
+      "trigger": "GitHub Action reference uses tag instead of SHA pin",
+      "severity": "block",
+      "tiers": ["t4-github"],
+      "remediation": "pinact run",
+      "autoRepair": true
+    }
+  ]
+}

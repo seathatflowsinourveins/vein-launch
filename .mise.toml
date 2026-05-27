@@ -1,0 +1,23 @@
+[tools]
+node = "24"
+python = "3.13"
+
+[tasks.test]
+run = "npx vitest run"
+description = "Run tests"
+
+[tasks.lint]
+run = "npx biome check ."
+description = "Lint with Biome"
+
+[tasks.fmt]
+run = "npx biome format --write ."
+description = "Format with Biome"
+
+[tasks.check]
+run = "npx biome check . && npx vitest run"
+description = "Full quality gate (lint + test)"
+
+[tasks.ci]
+run = "npx biome check . && npx vitest run --coverage"
+description = "Full CI sequence"

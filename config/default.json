@@ -1,0 +1,54 @@
+{
+  "modes": {
+    "fast": {
+      "budget": 5000,
+      "network": false,
+      "tiers": ["t0-rtk", "t1-env", "t2-cliproxy", "t3-cli"]
+    },
+    "deep": {
+      "budget": 30000,
+      "network": true,
+      "tiers": [
+        "t0-rtk",
+        "t1-env",
+        "t2-cliproxy",
+        "t3-cli",
+        "t4-github",
+        "t5-drift",
+        "t6-codegraph"
+      ]
+    },
+    "repair": {
+      "budget": 60000,
+      "network": true,
+      "tiers": [
+        "t0-rtk",
+        "t1-env",
+        "t2-cliproxy",
+        "t3-cli",
+        "t4-github",
+        "t5-drift",
+        "t6-codegraph"
+      ]
+    }
+  },
+  "cliproxy": {
+    "port": 8317,
+    "healthEndpoint": "/health",
+    "healthTimeout": 3000,
+    "maxRetries": 3
+  },
+  "quality": {
+    "codexModel": "gpt-5.5",
+    "codexEffort": "xhigh",
+    "codexReview": "every-stop",
+    "shipGate": true
+  },
+  "modelRouting": {
+    "default": "opus",
+    "subagents": "claude-haiku-4-5",
+    "planning": "opusplan"
+  },
+  "stateDir": "~/.vein",
+  "cacheTTL": 86400000
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "../schema.json",
+  "project": "evolve",
+  "mode": { "default": "deep" },
+  "cliproxy": {
+    "hosting": "pm2",
+    "accounts": ["claude-1", "claude-2"]
+  },
+  "quality": {
+    "codexReview": "every-stop",
+    "codexModel": "gpt-5.5",
+    "codexEffort": "xhigh",
+    "shipGate": true,
+    "autonomousLoops": true,
+    "maxIterations": 50,
+    "convergenceThreshold": 0.95
+  }
+}
