@@ -44,6 +44,24 @@ param(
 $ErrorActionPreference = 'Stop'
 $ScriptRoot = $PSScriptRoot
 
+# Accept POSIX-style long flags as aliases for the PowerShell switches above.
+# Without this, `vein --version` lands in $PassThrough and is forwarded to node,
+# which then sees both --mode=fast AND --version and rejects it as conflicting.
+if ($PassThrough) {
+  if ($PassThrough -contains '--version' -or $PassThrough -contains '-v') { $Version = $true }
+  if ($PassThrough -contains '--help' -or $PassThrough -contains '-h')    { $Help    = $true }
+  if ($PassThrough -contains '--setup')    { $Setup    = $true }
+  if ($PassThrough -contains '--status')   { $Status   = $true }
+  if ($PassThrough -contains '--projects') { $Projects = $true }
+  if ($PassThrough -contains '--accounts') { $Accounts = $true }
+  if ($PassThrough -contains '--manifest') { $Manifest = $true }
+  if ($PassThrough -contains '--deep')     { $Deep     = $true }
+  if ($PassThrough -contains '--repair')   { $Repair   = $true }
+  if ($PassThrough -contains '--ci')       { $Ci       = $true }
+  # Strip the consumed long-flags so they're not double-forwarded to node.
+  $PassThrough = $PassThrough | Where-Object { $_ -notmatch '^--?(version|v|help|h|setup|status|projects|accounts|manifest|deep|repair|ci)$' }
+}
+
 # Resolve vein-launch repo root deterministically:
 #   1. $env:VEIN_LAUNCH_ROOT (preferred — set by `vein --setup`)
 #   2. $PSScriptRoot/.. — works when this script lives in <repo>/bin/
