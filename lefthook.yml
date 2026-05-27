@@ -3,7 +3,7 @@ pre-commit:
   commands:
     lint:
       glob: "*.{js,mjs,json}"
-      run: npx biome check --staged {staged_files}
+      run: npx biome check --fix --staged {staged_files}
       stage_fixed: true
     gitleaks:
       run: gitleaks protect --staged --redact

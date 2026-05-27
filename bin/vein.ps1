@@ -29,6 +29,8 @@ param(
   [Alias('a')]
   [switch]$Accounts,
 
+  [switch]$Ci,
+
   [switch]$Version,
 
   [switch]$Help,
@@ -70,6 +72,8 @@ else {
   $nodeArgs += "--mode=$mode"
   if ($PassThrough) { $nodeArgs += $PassThrough }
 }
+
+if ($Ci) { $nodeArgs += '--ci' }
 
 & node @nodeArgs
 exit $LASTEXITCODE

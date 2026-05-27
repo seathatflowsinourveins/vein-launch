@@ -31,7 +31,7 @@ export async function loadConfig(args) {
 
   const merged = deepMerge(defaults, projectConfig ?? {});
 
-  return Object.freeze({
+  return deepFreeze({
     ...merged,
     mode,
     projectDir,

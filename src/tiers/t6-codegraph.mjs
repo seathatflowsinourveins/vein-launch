@@ -7,7 +7,7 @@ export async function check(config, context) {
   const start = performance.now();
   const evidence = [];
 
-  const gnVersion = await exec("npx gitnexus --version");
+  const gnVersion = await exec("npx gitnexus@1.6.5 --version");
   if (!gnVersion.ok) {
     evidence.push({ check: "gitnexus-available", actual: "gitnexus not available via npx" });
     return createResult({
@@ -19,7 +19,7 @@ export async function check(config, context) {
     });
   }
 
-  const status = await exec("npx gitnexus status");
+  const status = await exec("npx gitnexus@1.6.5 status");
   if (!status.ok) {
     evidence.push({ check: "gitnexus-index", actual: "repo not indexed" });
     return createResult({
@@ -58,7 +58,7 @@ export async function check(config, context) {
 
 export async function repair(config, context) {
   const start = performance.now();
-  const result = await exec("npx gitnexus analyze");
+  const result = await exec("npx gitnexus@1.6.5 analyze");
   return createResult({
     tierId: meta.id,
     tierName: meta.name,

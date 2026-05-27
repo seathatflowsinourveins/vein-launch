@@ -1,11 +1,12 @@
 /**
- * Orchestrator — mode router + tier sequencer + result persistence.
+ * Orchestrator — mode router + tier sequencer + result persistence + claude launch.
  * Entry point called by bin/vein.ps1 via `node src/orchestrator.mjs`.
  *
  * 12-Factor Agent compliance: F5 (persist state), F8 (own control flow), F11 (CI trigger), F12 (stateless reducer).
  */
 
 import { loadConfig } from "./lib/config.mjs";
+import { launchClaude } from "./lib/exec.mjs";
 import { reportJson } from "./lib/json-reporter.mjs";
 import { persistResults } from "./lib/persist.mjs";
 import { report } from "./lib/reporter.mjs";
@@ -49,6 +50,16 @@ export async function orchestrate(args) {
   const worst = worstSeverity(results);
   if (worst === Severity.BLOCK) return ExitCodes.TIER_BLOCK;
   if (worst === Severity.ERROR) return ExitCodes.TIER_ERROR;
+
+  if (!isCi && config.projectDir) {
+    try {
+      launchClaude(config, config.args?.passThrough ?? []);
+    } catch (err) {
+      console.error(`[vein] Launch failed: ${err.message}`);
+      return ExitCodes.INTERNAL_ERROR;
+    }
+  }
+
   return ExitCodes.SUCCESS;
 }
 
