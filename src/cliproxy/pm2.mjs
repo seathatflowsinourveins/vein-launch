@@ -1,9 +1,13 @@
 /**
  * PM2 CLIProxy provider.
  * Manages the "cliproxy" process through the PM2 process manager.
+ *
+ * Uses execArgs (array form) rather than exec (string form) so that
+ * binary paths containing spaces — e.g. `C:\Program Files\...\cliproxy.exe`
+ * — are passed as a single argument instead of being whitespace-split.
  */
 
-import { exec } from "../lib/shell.mjs";
+import { execArgs } from "../lib/shell.mjs";
 
 const PROCESS_NAME = "cliproxy";
 
@@ -18,7 +22,7 @@ const PROCESS_NAME = "cliproxy";
  * @returns {Promise<StatusResult>}
  */
 export async function status() {
-  const result = await exec(`pm2 describe ${PROCESS_NAME} --json`);
+  const result = await execArgs("pm2", ["describe", PROCESS_NAME, "--json"]);
 
   if (!result.ok) {
     return { running: false, pid: null, details: "not found" };
@@ -45,7 +49,7 @@ export async function status() {
  * @returns {Promise<ActionResult>}
  */
 export async function start(binaryPath) {
-  const result = await exec(`pm2 start ${binaryPath} --name ${PROCESS_NAME}`);
+  const result = await execArgs("pm2", ["start", binaryPath, "--name", PROCESS_NAME]);
   return { ok: result.ok, message: result.ok ? "started" : result.stderr };
 }
 
@@ -54,7 +58,7 @@ export async function start(binaryPath) {
  * @returns {Promise<ActionResult>}
  */
 export async function stop() {
-  const result = await exec(`pm2 stop ${PROCESS_NAME}`);
+  const result = await execArgs("pm2", ["stop", PROCESS_NAME]);
   return { ok: result.ok, message: result.ok ? "stopped" : result.stderr };
 }
 
@@ -63,7 +67,7 @@ export async function stop() {
  * @returns {Promise<ActionResult>}
  */
 export async function restart() {
-  const result = await exec(`pm2 restart ${PROCESS_NAME}`);
+  const result = await execArgs("pm2", ["restart", PROCESS_NAME]);
   return { ok: result.ok, message: result.ok ? "restarted" : result.stderr };
 }
 
@@ -73,7 +77,13 @@ export async function restart() {
  * @returns {Promise<LogsResult>}
  */
 export async function logs(lines = 50) {
-  const result = await exec(`pm2 logs ${PROCESS_NAME} --nostream --lines ${lines}`);
+  const result = await execArgs("pm2", [
+    "logs",
+    PROCESS_NAME,
+    "--nostream",
+    "--lines",
+    String(lines),
+  ]);
   return { stdout: result.stdout, stderr: result.stderr };
 }
 

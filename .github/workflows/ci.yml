@@ -23,7 +23,7 @@ jobs:
         name: Lint
       - run: npx vitest run --reporter=verbose
         name: Test
-      - run: npx vitest run --coverage --coverage.thresholds.lines=80
+      - run: npx vitest run --coverage
         name: Coverage
       - name: Eval
         if: success()

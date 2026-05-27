@@ -226,13 +226,14 @@ export async function evaluateGate({
   /** @type {number | undefined} */
   let behavioralScore;
   if (typeof behavioralRunner === "function") {
+    // Wave 11 codex review BLOCK fix: errors must throw, not silently become
+    // `behavioralScore=undefined`. The old swallow path let behavioral
+    // regressions pass as vitest-only PASS — fail closed instead.
     try {
       const behavResult = await behavioralRunner();
       behavioralScore = behavResult.behavioralScore;
-    } catch (_err) {
-      // Non-blocking for now — record as warning but don't crash the gate
-      behavioralScore = undefined;
-      // Append warning to the warning chain (will appear on gate output)
+    } catch (err) {
+      throw new Error(`Eval gate behavioral runner failed: ${err.message}`);
     }
   }
 
@@ -319,8 +320,24 @@ if (isMain || process.argv[1]?.endsWith("eval_gate.mjs")) {
     process.exit(1);
   }
 
+  // Wave 11 codex review BLOCK fix: conditionally inject the behavioral runner
+  // when `.vein.json` opts in via `quality.promptfooGate: true`. Without this
+  // wire the entire promptfoo gating pipeline is unreachable from the CLI
+  // (i.e. dead code in production).
+  let behavioralRunner;
   try {
-    const result = await evaluateGate({ commitMsgPath });
+    const cfgRaw = await readFile(join(process.cwd(), ".vein.json"), "utf8");
+    const cfg = JSON.parse(cfgRaw);
+    if (cfg?.quality?.promptfooGate === true) {
+      const { runBehavioralEval } = await import("./behavioral_eval.mjs");
+      behavioralRunner = runBehavioralEval;
+    }
+  } catch {
+    // Missing or unreadable .vein.json — leave behavioralRunner unset.
+  }
+
+  try {
+    const result = await evaluateGate({ commitMsgPath, behavioralRunner });
 
     if (result.status === "BLOCK") {
       process.stderr.write(

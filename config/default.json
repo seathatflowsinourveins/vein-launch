@@ -34,7 +34,7 @@
   },
   "cliproxy": {
     "port": 8317,
-    "healthEndpoint": "/health",
+    "healthEndpoint": "/healthz",
     "healthTimeout": 3000,
     "maxRetries": 3
   },

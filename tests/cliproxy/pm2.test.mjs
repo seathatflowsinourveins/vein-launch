@@ -6,10 +6,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/lib/shell.mjs", () => ({
-  exec: vi.fn(),
+  execArgs: vi.fn(),
 }));
 
-const { exec } = await import("../../src/lib/shell.mjs");
+const { execArgs } = await import("../../src/lib/shell.mjs");
 const { logs, restart, start, status, stop } = await import("../../src/cliproxy/pm2.mjs");
 
 /** Build a successful exec result with given stdout. */
@@ -39,7 +39,7 @@ beforeEach(() => {
 
 describe("status()", () => {
   it("returns running:true when pm2 shows online", async () => {
-    exec.mockResolvedValueOnce(ok(pm2Json("online")));
+    execArgs.mockResolvedValueOnce(ok(pm2Json("online")));
 
     const result = await status();
 
@@ -48,7 +48,7 @@ describe("status()", () => {
   });
 
   it("returns running:false when pm2 shows stopped", async () => {
-    exec.mockResolvedValueOnce(ok(pm2Json("stopped")));
+    execArgs.mockResolvedValueOnce(ok(pm2Json("stopped")));
 
     const result = await status();
 
@@ -57,7 +57,7 @@ describe("status()", () => {
   });
 
   it("returns running:false when pm2 shows errored", async () => {
-    exec.mockResolvedValueOnce(ok(pm2Json("errored")));
+    execArgs.mockResolvedValueOnce(ok(pm2Json("errored")));
 
     const result = await status();
 
@@ -66,7 +66,7 @@ describe("status()", () => {
   });
 
   it("returns running:false when pm2 describe fails (non-zero exit)", async () => {
-    exec.mockResolvedValueOnce(fail("process or namespace not found"));
+    execArgs.mockResolvedValueOnce(fail("process or namespace not found"));
 
     const result = await status();
 
@@ -76,7 +76,7 @@ describe("status()", () => {
   });
 
   it("returns running:false when pm2 returns empty JSON array", async () => {
-    exec.mockResolvedValueOnce(ok(JSON.stringify([])));
+    execArgs.mockResolvedValueOnce(ok(JSON.stringify([])));
 
     const result = await status();
 
@@ -86,7 +86,7 @@ describe("status()", () => {
   });
 
   it("parses pid from JSON output when process is online", async () => {
-    exec.mockResolvedValueOnce(ok(pm2Json("online", 99001)));
+    execArgs.mockResolvedValueOnce(ok(pm2Json("online", 99001)));
 
     const result = await status();
 
@@ -94,19 +94,19 @@ describe("status()", () => {
   });
 
   it("returns pid:null when process is stopped", async () => {
-    exec.mockResolvedValueOnce(ok(pm2Json("stopped", 0)));
+    execArgs.mockResolvedValueOnce(ok(pm2Json("stopped", 0)));
 
     const result = await status();
 
     expect(result.pid).toBeNull();
   });
 
-  it("calls exec with pm2 describe command", async () => {
-    exec.mockResolvedValueOnce(fail());
+  it("calls execArgs with pm2 describe command", async () => {
+    execArgs.mockResolvedValueOnce(fail());
 
     await status();
 
-    expect(exec).toHaveBeenCalledWith("pm2 describe cliproxy --json");
+    expect(execArgs).toHaveBeenCalledWith("pm2", ["describe", "cliproxy", "--json"]);
   });
 });
 
@@ -116,15 +116,20 @@ describe("status()", () => {
 
 describe("start()", () => {
   it("calls pm2 start with the provided binary path", async () => {
-    exec.mockResolvedValueOnce(ok(""));
+    execArgs.mockResolvedValueOnce(ok(""));
 
     await start("/usr/bin/claude");
 
-    expect(exec).toHaveBeenCalledWith("pm2 start /usr/bin/claude --name cliproxy");
+    expect(execArgs).toHaveBeenCalledWith("pm2", [
+      "start",
+      "/usr/bin/claude",
+      "--name",
+      "cliproxy",
+    ]);
   });
 
   it("returns ok:true on success", async () => {
-    exec.mockResolvedValueOnce(ok(""));
+    execArgs.mockResolvedValueOnce(ok(""));
 
     const result = await start("/usr/bin/claude");
 
@@ -133,7 +138,7 @@ describe("start()", () => {
   });
 
   it("returns ok:false with stderr on failure", async () => {
-    exec.mockResolvedValueOnce(fail("binary not found"));
+    execArgs.mockResolvedValueOnce(fail("binary not found"));
 
     const result = await start("/missing/bin");
 
@@ -148,15 +153,15 @@ describe("start()", () => {
 
 describe("stop()", () => {
   it("calls pm2 stop cliproxy", async () => {
-    exec.mockResolvedValueOnce(ok(""));
+    execArgs.mockResolvedValueOnce(ok(""));
 
     await stop();
 
-    expect(exec).toHaveBeenCalledWith("pm2 stop cliproxy");
+    expect(execArgs).toHaveBeenCalledWith("pm2", ["stop", "cliproxy"]);
   });
 
   it("returns ok:true when pm2 stop succeeds", async () => {
-    exec.mockResolvedValueOnce(ok(""));
+    execArgs.mockResolvedValueOnce(ok(""));
 
     const result = await stop();
 
@@ -165,7 +170,7 @@ describe("stop()", () => {
   });
 
   it("returns ok:false with stderr when pm2 stop fails", async () => {
-    exec.mockResolvedValueOnce(fail("process cliproxy not found"));
+    execArgs.mockResolvedValueOnce(fail("process cliproxy not found"));
 
     const result = await stop();
 
@@ -180,15 +185,15 @@ describe("stop()", () => {
 
 describe("restart()", () => {
   it("calls pm2 restart cliproxy", async () => {
-    exec.mockResolvedValueOnce(ok(""));
+    execArgs.mockResolvedValueOnce(ok(""));
 
     await restart();
 
-    expect(exec).toHaveBeenCalledWith("pm2 restart cliproxy");
+    expect(execArgs).toHaveBeenCalledWith("pm2", ["restart", "cliproxy"]);
   });
 
   it("returns ok:true when pm2 restart succeeds", async () => {
-    exec.mockResolvedValueOnce(ok(""));
+    execArgs.mockResolvedValueOnce(ok(""));
 
     const result = await restart();
 
@@ -197,7 +202,7 @@ describe("restart()", () => {
   });
 
   it("returns ok:false with stderr when pm2 restart fails", async () => {
-    exec.mockResolvedValueOnce(fail("process cliproxy not found"));
+    execArgs.mockResolvedValueOnce(fail("process cliproxy not found"));
 
     const result = await restart();
 
@@ -212,23 +217,35 @@ describe("restart()", () => {
 
 describe("logs()", () => {
   it("calls pm2 logs with correct default line count (50)", async () => {
-    exec.mockResolvedValueOnce(ok(""));
+    execArgs.mockResolvedValueOnce(ok(""));
 
     await logs();
 
-    expect(exec).toHaveBeenCalledWith("pm2 logs cliproxy --nostream --lines 50");
+    expect(execArgs).toHaveBeenCalledWith("pm2", [
+      "logs",
+      "cliproxy",
+      "--nostream",
+      "--lines",
+      "50",
+    ]);
   });
 
   it("calls pm2 logs with a custom line count", async () => {
-    exec.mockResolvedValueOnce(ok(""));
+    execArgs.mockResolvedValueOnce(ok(""));
 
     await logs(200);
 
-    expect(exec).toHaveBeenCalledWith("pm2 logs cliproxy --nostream --lines 200");
+    expect(execArgs).toHaveBeenCalledWith("pm2", [
+      "logs",
+      "cliproxy",
+      "--nostream",
+      "--lines",
+      "200",
+    ]);
   });
 
   it("returns stdout and stderr from the exec result", async () => {
-    exec.mockResolvedValueOnce({
+    execArgs.mockResolvedValueOnce({
       ok: true,
       stdout: "log line 1\nlog line 2",
       stderr: "some warning",
