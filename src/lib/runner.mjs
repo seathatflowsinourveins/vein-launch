@@ -54,7 +54,8 @@ export async function runTiers(config) {
       );
       results.push(result);
 
-      if (isRepair && result.severity === Severity.BLOCK && mod.repair) {
+      const shouldRepair = result.severity === Severity.BLOCK || result.diagnostics?.triggerReindex;
+      if (isRepair && shouldRepair && mod.repair) {
         const repairStart = performance.now();
         const remainingBudget = budget - elapsed - (performance.now() - start);
         if (remainingBudget > 0) {

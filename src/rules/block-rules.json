@@ -43,6 +43,7 @@
       "trigger": "GitHub CLI auth expired or missing required scopes (repo, workflow, security_events)",
       "severity": "block",
       "tiers": ["t4-github"],
+      "evidenceChecks": ["gh-auth-login", "gh-auth-scopes"],
       "remediation": "gh auth login --scopes repo,workflow,security_events",
       "autoRepair": false
     },
@@ -61,6 +62,7 @@
       "trigger": "GitHub Action reference uses tag instead of SHA pin",
       "severity": "block",
       "tiers": ["t4-github"],
+      "evidenceChecks": ["action-sha-pin"],
       "remediation": "pinact run",
       "autoRepair": true
     }

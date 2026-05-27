@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -47,16 +48,24 @@ function compareSemver(a, b) {
   return 0;
 }
 
+function configHash(pinnedVersions) {
+  const input = JSON.stringify(pinnedVersions ?? {});
+  return createHash("sha256").update(input).digest("hex").slice(0, 16);
+}
+
 /**
- * Try to load a valid fresh cache entry. Returns null on miss or stale.
+ * Try to load a valid fresh cache entry. Returns null on miss, stale, or config mismatch.
+ * @param {Record<string,string>} pinnedVersions
  * @returns {{ severity: string, evidence: object[], durationMs: number }|null}
  */
-function loadCache() {
+function loadCache(pinnedVersions) {
   const path = cachePath();
   if (!existsSync(path)) return null;
   try {
     const raw = JSON.parse(readFileSync(path, "utf-8"));
     if (!raw.timestamp || Date.now() - raw.timestamp >= CACHE_TTL_MS) return null;
+    if (raw.configHash !== configHash(pinnedVersions)) return null;
+    if (!raw.severity || !Array.isArray(raw.evidence)) return null;
     return raw;
   } catch {
     return null;
@@ -66,14 +75,18 @@ function loadCache() {
 /**
  * Persist a result payload to the disk cache.
  * @param {{ severity: string, evidence: object[], durationMs: number }} payload
+ * @param {Record<string,string>} pinnedVersions
  */
-function saveCache(payload) {
+function saveCache(payload, pinnedVersions) {
   try {
     const dir = join(homedir(), ".vein");
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(cachePath(), JSON.stringify({ timestamp: Date.now(), ...payload }));
+    writeFileSync(
+      cachePath(),
+      JSON.stringify({ timestamp: Date.now(), configHash: configHash(pinnedVersions), ...payload }),
+    );
   } catch {
-    // Non-fatal — cache write failure should never block the check
+    // Non-fatal
   }
 }
 
@@ -181,8 +194,9 @@ function runDriftCheck(pinnedVersions) {
 export async function check(config, _context) {
   const start = performance.now();
 
-  // Try cache first
-  const cached = loadCache();
+  const pinnedVersions = config?.mcp?.pinnedVersions ?? {};
+
+  const cached = loadCache(pinnedVersions);
   if (cached) {
     return createResult({
       tierId: meta.id,
@@ -194,12 +208,11 @@ export async function check(config, _context) {
     });
   }
 
-  const pinnedVersions = config?.mcp?.pinnedVersions ?? {};
   const { severity, evidence } = runDriftCheck(pinnedVersions);
 
   const durationMs = performance.now() - start;
   const payload = { severity, evidence, durationMs, tierId: meta.id, tierName: meta.name };
-  saveCache(payload);
+  saveCache(payload, pinnedVersions);
 
   return createResult({
     tierId: meta.id,

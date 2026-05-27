@@ -79,6 +79,8 @@ const mcpConfigNoPinned = JSON.stringify({
   },
 });
 
+const MOCK_CONFIG_HASH = "70e3e477cde02d4c";
+
 /** Valid fresh cache (< 24h old) */
 function freshCache(
   severity = Severity.PASS,
@@ -86,6 +88,7 @@ function freshCache(
 ) {
   return JSON.stringify({
     timestamp: Date.now() - 1000 * 60 * 60, // 1 hour ago
+    configHash: MOCK_CONFIG_HASH,
     severity,
     evidence,
     tierId: "t5-drift",
@@ -98,6 +101,7 @@ function freshCache(
 function staleCache() {
   return JSON.stringify({
     timestamp: Date.now() - 1000 * 60 * 60 * 25, // 25 hours ago
+    configHash: MOCK_CONFIG_HASH,
     severity: Severity.PASS,
     evidence: [{ check: "mcp-drift", actual: "stale-cached" }],
     tierId: "t5-drift",

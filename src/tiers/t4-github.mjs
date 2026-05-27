@@ -34,7 +34,15 @@ async function checkAuthScopes() {
     };
   }
 
-  const missing = REQUIRED_SCOPES.filter((s) => !combined.includes(s));
+  const scopeLine = combined.split(/\r?\n/).find((l) => /token scopes?:/i.test(l));
+  const scopes = new Set(
+    (scopeLine ?? "")
+      .replace(/^.*token scopes?:/i, "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  const missing = REQUIRED_SCOPES.filter((s) => !scopes.has(s));
   if (missing.length > 0) {
     return {
       passEvidence: [],

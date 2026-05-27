@@ -44,7 +44,10 @@ export function evaluateBlockRules(tierResults) {
 
   for (const rule of rules) {
     const matchingResults = tierResults.filter(
-      (r) => rule.tiers.includes(r.tierId) && r.severity === Severity.BLOCK,
+      (r) =>
+        rule.tiers.includes(r.tierId) &&
+        r.severity === Severity.BLOCK &&
+        (!rule.evidenceChecks || r.evidence.some((e) => rule.evidenceChecks.includes(e.check))),
     );
     if (matchingResults.length > 0) {
       triggered.push({
