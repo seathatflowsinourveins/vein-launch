@@ -15,12 +15,20 @@
     "format": "biome format --write .",
     "prepare": "npx lefthook install"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "config/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "claude-code",
     "launcher",
+    "precheck",
     "cli",
-    "developer-tools",
-    "automation"
+    "developer-tools"
   ],
   "author": "seath",
   "license": "MIT",

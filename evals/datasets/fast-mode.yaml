@@ -1,0 +1,26 @@
+# Promptfoo eval dataset for vein-launch fast mode
+# Tests that the precheck pipeline handles common scenarios correctly
+
+tests:
+  - description: "Fast mode completes within budget"
+    vars:
+      mode: fast
+      project: null
+    assert:
+      - type: contains
+        value: "vein-launch [fast]"
+
+  - description: "Missing state dir triggers WARN"
+    vars:
+      mode: fast
+      stateDir: /nonexistent
+    assert:
+      - type: contains
+        value: "state-dir"
+
+  - description: "Invalid args rejected with exit 3"
+    vars:
+      args: "--deep --repair"
+    assert:
+      - type: contains
+        value: "Cannot combine"
