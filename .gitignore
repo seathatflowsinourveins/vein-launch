@@ -11,6 +11,9 @@ Thumbs.db
 .vein/
 .vitest/
 .swarm/
+.claude-flow/
+.claude/worktrees/
+.remember/
 ruvector.db
 *.db
 CLAUDE.local.md
