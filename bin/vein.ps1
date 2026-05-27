@@ -29,6 +29,8 @@ param(
   [Alias('a')]
   [switch]$Accounts,
 
+  [switch]$Manifest,
+
   [switch]$Ci,
 
   [switch]$Version,
@@ -67,6 +69,7 @@ if ($Setup) { $nodeArgs += '--setup' }
 elseif ($Status) { $nodeArgs += '--status' }
 elseif ($Projects) { $nodeArgs += '--projects' }
 elseif ($Accounts) { $nodeArgs += '--accounts' }
+elseif ($Manifest) { $nodeArgs += '--manifest' }
 else {
   if ($Project) { $nodeArgs += $Project }
   $nodeArgs += "--mode=$mode"

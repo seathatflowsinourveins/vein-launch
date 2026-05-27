@@ -65,13 +65,25 @@ async function readLastBaseline(path) {
 
 /**
  * Extract the OVERRIDE-EVAL-REGRESSION trailer value from a commit message.
- * Returns the rationale string if present and non-empty, otherwise null.
+ * Only matches within the trailer block (after the last blank line) so a
+ * fake `OVERRIDE-EVAL-REGRESSION:` token in the commit body cannot bypass.
  *
  * @param {string} msg
  * @returns {string | null}
  */
 function extractOverrideRationale(msg) {
-  const match = msg.match(/^OVERRIDE-EVAL-REGRESSION:\s*(.+)$/m);
+  const lines = msg.split(/\r?\n/);
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+
+  let trailerStart = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim() === "") {
+      trailerStart = i + 1;
+      break;
+    }
+  }
+  const trailerBlock = lines.slice(trailerStart).join("\n");
+  const match = trailerBlock.match(/^OVERRIDE-EVAL-REGRESSION:\s*(.+)$/m);
   if (!match) return null;
   const rationale = match[1].trim();
   return rationale.length > 0 ? rationale : null;
@@ -83,10 +95,18 @@ function extractOverrideRationale(msg) {
  * @returns {Promise<{ numPassedTests: number, numTotalTests: number }>}
  */
 async function defaultTestRunner() {
-  const { stdout } = await execFileAsync("npx", ["vitest", "run", "--reporter=json"], {
-    shell: true,
-  });
-  // vitest --reporter=json may emit some lines before the JSON blob
+  let stdout;
+  try {
+    const result = await execFileAsync("npx", ["vitest", "run", "--reporter=json"], {
+      shell: true,
+    });
+    stdout = result.stdout;
+  } catch (err) {
+    // vitest exits non-zero when tests fail but still writes JSON to stdout —
+    // we MUST parse that JSON or every real regression silently slips the gate.
+    stdout = err.stdout ?? "";
+    if (!stdout) throw err;
+  }
   const jsonStart = stdout.indexOf("{");
   if (jsonStart === -1) throw new Error("vitest --reporter=json produced no JSON output");
   return JSON.parse(stdout.slice(jsonStart));
@@ -142,7 +162,12 @@ export async function evaluateGate({
   // 3. Run tests
   const testResult = await testRunner();
   const { numPassedTests, numTotalTests } = testResult;
-  const score = numTotalTests > 0 ? (numPassedTests / numTotalTests) * 100 : 0;
+  if (!Number.isFinite(numTotalTests) || numTotalTests <= 0) {
+    throw new Error(
+      "Eval gate: vitest reported 0 total tests — refusing to seed a 0-score baseline (treat as infrastructure failure)",
+    );
+  }
+  const score = (numPassedTests / numTotalTests) * 100;
 
   // 4. Resolve git sha
   const commit = await gitSha();

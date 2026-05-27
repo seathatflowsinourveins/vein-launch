@@ -32,7 +32,7 @@ export async function printManifest({ out = process.stdout, manifestPath } = {})
     out.write(content);
     return 0;
   } catch (err) {
-    process.stderr.write(`[vein] manifest unavailable: ${err.message}\n`);
+    process.stderr.write(`[vein] manifest unavailable: ${err.code ?? "read failed"}\n`);
     return 1;
   }
 }

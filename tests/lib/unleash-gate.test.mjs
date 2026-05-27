@@ -147,4 +147,55 @@ describe("configPhase=bypass", () => {
     expect(result.phase).toBe("bypass");
     expect(result.downgraded).toBe(false);
   });
+
+  // ---- production format: persist.mjs writes `tiers` field with lowercase severity ----
+
+  it("accepts production format: tiers field + lowercase severity + mode=deep", async () => {
+    await writeRun("run1.json", {
+      project: "vein-launch",
+      mode: "deep",
+      tiers: Array.from({ length: 7 }, (_, i) => ({ tierId: `t${i}`, severity: "pass" })),
+    });
+    const result = await resolveUnleashPhase({
+      configPhase: "bypass",
+      runsDir: tmpDir,
+      project: "vein-launch",
+    });
+    expect(result.phase).toBe("bypass");
+    expect(result.downgraded).toBe(false);
+  });
+
+  // ---- project filter: cross-project run does NOT qualify when caller specifies project ----
+
+  it("rejects runs from a different project when caller specifies project filter", async () => {
+    await writeRun("run1.json", {
+      project: "other-project",
+      mode: "deep",
+      tiers: Array.from({ length: 7 }, (_, i) => ({ tierId: `t${i}`, severity: "pass" })),
+    });
+    const result = await resolveUnleashPhase({
+      configPhase: "bypass",
+      runsDir: tmpDir,
+      project: "vein-launch",
+    });
+    expect(result.phase).toBe("allow-populated");
+    expect(result.downgraded).toBe(true);
+  });
+
+  // ---- mode filter: fast-mode runs do NOT qualify ----
+
+  it("rejects fast-mode runs (only deep mode qualifies)", async () => {
+    await writeRun("run1.json", {
+      project: "vein-launch",
+      mode: "fast",
+      tiers: Array.from({ length: 7 }, (_, i) => ({ tierId: `t${i}`, severity: "pass" })),
+    });
+    const result = await resolveUnleashPhase({
+      configPhase: "bypass",
+      runsDir: tmpDir,
+      project: "vein-launch",
+    });
+    expect(result.phase).toBe("allow-populated");
+    expect(result.downgraded).toBe(true);
+  });
 });

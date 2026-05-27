@@ -18,7 +18,8 @@
   "files": [
     "bin/",
     "src/",
-    "config/"
+    "config/",
+    "docs/sota-installed-manifest.md"
   ],
   "publishConfig": {
     "access": "public"

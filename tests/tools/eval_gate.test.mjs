@@ -290,6 +290,55 @@ describe("evaluateGate", () => {
     expect(appendFile).toHaveBeenCalledOnce();
   });
 
+  // ---- security: trailer in commit body should NOT bypass ----
+
+  it("ignores OVERRIDE-EVAL-REGRESSION when it appears in commit body, not the trailer block", async () => {
+    readFile.mockImplementation(async (path) => {
+      if (path === COMMIT_MSG_PATH) {
+        // Trailer-shaped line appears in BODY (not the actual trailer block).
+        // The real trailer block is "Signed-off-by: ..." after the blank line.
+        return "feat: something\n\nOVERRIDE-EVAL-REGRESSION: fake-in-body\n\nSigned-off-by: someone\n";
+      }
+      if (path === HISTORY_PATH) return makeHistoryEntry(90) + "\n";
+      throw new Error(`Unexpected read: ${path}`);
+    });
+
+    // 80pp vs 90pp → -10pp, would block without override
+    const result = await evaluateGate({
+      commitMsgPath: COMMIT_MSG_PATH,
+      historyPath: HISTORY_PATH,
+      testRunner: makeTestRunner(makeVitestResult({ numPassedTests: 80, numTotalTests: 100 })),
+      gitSha: fakeGitSha,
+    });
+
+    expect(result.status).toBe("BLOCK");
+    expect(result.exitCode).toBe(2);
+  });
+
+  // ---- infrastructure failure: 0 total tests → refuse to seed ----
+
+  it("throws when vitest reports 0 total tests (refuses to seed a 0-score baseline)", async () => {
+    readFile.mockImplementation(async (path) => {
+      if (path === COMMIT_MSG_PATH) return "feat: x\n";
+      if (path === HISTORY_PATH) return "";
+      throw new Error(`Unexpected read: ${path}`);
+    });
+
+    await expect(
+      evaluateGate({
+        commitMsgPath: COMMIT_MSG_PATH,
+        historyPath: HISTORY_PATH,
+        testRunner: makeTestRunner({
+          numPassedTests: 0,
+          numTotalTests: 0,
+          numFailedTests: 0,
+          success: false,
+        }),
+        gitSha: fakeGitSha,
+      }),
+    ).rejects.toThrow(/0 total tests/);
+  });
+
   // ---- uses only the LAST line in history as baseline ----
 
   it("uses the last JSONL entry as the baseline (not the first)", async () => {

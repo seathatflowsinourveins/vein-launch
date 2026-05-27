@@ -87,6 +87,7 @@ export async function buildLaunchArgsAsync(config, passThrough, opts = {}) {
   const { phase, downgraded, reason } = await resolveUnleashPhase({
     configPhase: config.unleashPhase ?? "default",
     runsDir,
+    project: config.project,
   });
 
   if (downgraded) {
