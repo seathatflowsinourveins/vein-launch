@@ -18,6 +18,15 @@ export function buildLaunchEnv(config) {
   }
 
   env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1";
+  env.CLAUDE_CODE_EFFORT_LEVEL = "max";
+  env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE = "80";
+
+  if (config.quality?.codexReview === "every-stop") {
+    env.CODEX_STOP_REVIEW = "1";
+  }
+
+  env.VEIN_LAUNCHED = "1";
+  env.VEIN_PROJECT = config.project ?? "";
 
   if (config.env) {
     Object.assign(env, config.env);
