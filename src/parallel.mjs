@@ -10,15 +10,28 @@ import { exec } from "./lib/shell.mjs";
  * @typedef {{ spawned: number, failed: number, sessions: SessionResult[] }} SpawnResult
  */
 
+const SAFE_NAME_RE = /^[a-zA-Z0-9_-]{1,100}$/;
+
+function sanitizeForShell(value) {
+  return value.replace(/["%$`\\!]/g, "");
+}
+
 /**
  * Build a `wt` command that opens a new tab for the given session.
  * @param {Session} session
  * @returns {string}
  */
 export function buildWtCommand(session) {
+  if (!SAFE_NAME_RE.test(session.name)) {
+    throw new Error(
+      `Invalid session name: ${session.name} — must be alphanumeric/hyphen/underscore, 1-100 chars`,
+    );
+  }
+  const safeCwd = sanitizeForShell(session.cwd);
   const args = session.args ?? ["--dangerously-skip-permissions"];
-  const claudeCmd = `claude ${args.join(" ")}`;
-  return `wt -w 0 new-tab --title "${session.name}" -d "${session.cwd}" ${claudeCmd}`;
+  const safeArgs = args.map(sanitizeForShell);
+  const claudeCmd = `claude ${safeArgs.join(" ")}`;
+  return `wt -w 0 new-tab --title "${session.name}" -d "${safeCwd}" ${claudeCmd}`;
 }
 
 /**

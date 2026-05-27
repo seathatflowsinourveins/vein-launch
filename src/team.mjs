@@ -15,6 +15,15 @@ import { join } from "node:path";
  */
 
 const DEFAULT_LEAD = { model: "opus", instructions: "Coordinate the team" };
+const SAFE_TEAM_NAME_RE = /^[a-zA-Z0-9_-]{1,100}$/;
+
+function validateTeamName(name) {
+  if (!SAFE_TEAM_NAME_RE.test(name)) {
+    throw new Error(
+      `Invalid team name: ${name} — must be alphanumeric/hyphen/underscore, 1-100 chars`,
+    );
+  }
+}
 
 /**
  * Generate a TeamConfig from a vein.json config object.
@@ -24,6 +33,7 @@ const DEFAULT_LEAD = { model: "opus", instructions: "Coordinate the team" };
 export function generateTeamConfig(config) {
   const agents = config?.agents;
   if (!agents?.teamName) return null;
+  validateTeamName(agents.teamName);
 
   const teamDir = join(homedir(), ".claude", "teams", agents.teamName);
   const taskDir = join(teamDir, "tasks");
@@ -44,6 +54,7 @@ export function generateTeamConfig(config) {
  */
 export function writeTeamConfig(teamConfig) {
   if (!teamConfig?.name) return { ok: false, message: "invalid team config" };
+  validateTeamName(teamConfig.name);
 
   const teamDir = join(homedir(), ".claude", "teams", teamConfig.name);
   const configPath = join(teamDir, "config.json");
@@ -63,6 +74,7 @@ export function writeTeamConfig(teamConfig) {
  * @returns {TeamConfig | null}
  */
 export function loadTeamConfig(teamName) {
+  validateTeamName(teamName);
   const configPath = join(homedir(), ".claude", "teams", teamName, "config.json");
   if (!existsSync(configPath)) return null;
   try {
