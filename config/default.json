@@ -50,5 +50,11 @@
     "planning": "opusplan"
   },
   "stateDir": "~/.vein",
-  "cacheTTL": 86400000
+  "cacheTTL": 86400000,
+  "mcp": {
+    "pinnedVersions": {
+      "github-mcp-server": "1.0.5",
+      "gitnexus": "1.6.5"
+    }
+  }
 }
