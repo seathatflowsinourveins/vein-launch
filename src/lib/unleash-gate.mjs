@@ -1,11 +1,16 @@
 /**
  * Unleash phase auto-gate logic.
  *
- * "bypass" requires proof of at least one successful all-tiers-PASS precheck
- * run recorded in runsDir. If no qualifying run is found, the phase is
- * downgraded to "allow-populated" so the user still gets skip-permissions but
- * must have a curated allow-list in .claude/settings.json.
+ * "bypass" requires proof of at least one successful deep precheck run with no
+ * fatal severities recorded in runsDir. Fatal severities are "block" and "error".
+ * Non-fatal severities (pass, info, warn, skip) are considered operable and do
+ * not disqualify a run. If no qualifying run is found, the phase is downgraded
+ * to "allow-populated" so the user still gets skip-permissions but must have a
+ * curated allow-list in .claude/settings.json.
  */
+
+/** Severities that indicate a fatal precheck failure and disqualify a run. */
+const FATAL_SEVERITIES = ["block", "error"];
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -26,11 +31,12 @@ export async function resolveUnleashPhase({ configPhase, runsDir, project }) {
     phase: "allow-populated",
     downgraded: true,
     reason:
-      "bypass requires at least one all-tiers-PASS deep run for this project; downgrading to allow-populated",
+      "bypass requires at least one deep run with no fatal severities for this project; downgrading to allow-populated",
   };
 }
 
 async function checkQualifyingRun(runsDir, project) {
+  const FATAL = new Set(FATAL_SEVERITIES);
   try {
     const entries = await readdir(runsDir);
     for (const name of entries) {
@@ -51,7 +57,7 @@ async function checkQualifyingRun(runsDir, project) {
         if (
           tiers &&
           tiers.length >= 7 &&
-          tiers.every((r) => String(r.severity).toUpperCase() === "PASS")
+          tiers.every((r) => !FATAL.has(String(r.severity).toLowerCase()))
         ) {
           return true;
         }
