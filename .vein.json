@@ -1,6 +1,10 @@
 {
   "project": "vein-launch",
   "mode": { "default": "fast" },
+  "cliproxy": {
+    "hosting": "pm2",
+    "port": 8317
+  },
   "modelRouting": {
     "default": "opus",
     "subagents": "claude-haiku-4-5"
