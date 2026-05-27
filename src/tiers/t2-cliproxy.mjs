@@ -46,10 +46,18 @@ async function checkProcess(cliproxy) {
   };
 }
 
-/** @param {number} port @returns {Promise<{ ok: boolean, body: object|null, evidence: import("../lib/result.mjs").Evidence }>} */
+/**
+ * CLIProxy v7+ uses /healthz (Kubernetes-style, Google-Borg lineage) rather
+ * than /health to avoid collisions with application routes. Probing /health
+ * returns 404 against CLIProxy v7.1.24+, which the old code mis-reported as
+ * "non-JSON response" (it was actually a plain-text 404 body).
+ *
+ * @param {number} port
+ * @returns {Promise<{ ok: boolean, body: object|null, evidence: import("../lib/result.mjs").Evidence }>}
+ */
 async function checkHttp(port) {
   try {
-    const res = await fetch(`http://localhost:${port}/health`, {
+    const res = await fetch(`http://localhost:${port}/healthz`, {
       signal: AbortSignal.timeout(3000),
     });
     let body = null;
@@ -92,7 +100,7 @@ async function checkHttp(port) {
       evidence: {
         check: "cliproxy-health",
         actual: `Health endpoint unreachable: ${err.message}`,
-        remediation: `Ensure CLIProxy is running on port ${port} and /health endpoint is available`,
+        remediation: `Ensure CLIProxy is running on port ${port} and /healthz endpoint is available`,
       },
     };
   }

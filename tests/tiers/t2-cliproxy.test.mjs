@@ -130,7 +130,7 @@ describe("t2-cliproxy", () => {
 
       expect(result.severity).toBe(Severity.PASS);
       expect(fetch).toHaveBeenCalledWith(
-        "http://localhost:8317/health",
+        "http://localhost:8317/healthz",
         expect.objectContaining({ signal: expect.any(Object) }),
       );
     });
