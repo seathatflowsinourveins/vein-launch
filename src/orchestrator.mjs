@@ -62,7 +62,7 @@ export async function orchestrate(args) {
     const cliproxyActive = t2Result?.severity === Severity.PASS;
     const launchConfig = { ...config, _cliproxyActive: cliproxyActive };
     try {
-      launchClaude(launchConfig, config.args?.passThrough ?? []);
+      await launchClaude(launchConfig, config.args?.passThrough ?? []);
     } catch (err) {
       console.error(`[vein] Launch failed: ${err.message}`);
       return ExitCodes.INTERNAL_ERROR;

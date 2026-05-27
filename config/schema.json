@@ -103,6 +103,11 @@
           { "required": ["USERPROFILE"] }
         ]
       }
+    },
+    "unleashPhase": {
+      "enum": ["default", "allow-populated", "bypass"],
+      "default": "default",
+      "description": "Permission unleash phase. default=safe (no --dangerously-skip), allow-populated=skip-flag with curated allow list, bypass=full skip-flag (legacy v1.0)"
     }
   },
   "required": ["project"],
