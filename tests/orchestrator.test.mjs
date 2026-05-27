@@ -6,7 +6,7 @@
  * runTiers (runner) so tests do not depend on rtk/tooling being installed.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock all dependencies BEFORE importing orchestrate
 vi.mock("../src/lib/exec.mjs", () => ({
@@ -19,9 +19,22 @@ vi.mock("../src/lib/persist.mjs", () => ({
 
 vi.mock("../src/lib/runner.mjs", () => ({
   runTiers: vi.fn().mockResolvedValue({
-    results: [],
+    results: [
+      {
+        tierId: "t0-rtk",
+        severity: "pass",
+        durationMs: 12,
+        evidence: [{ check: "rtk", actual: "found" }],
+      },
+      {
+        tierId: "t1-env",
+        severity: "pass",
+        durationMs: 5,
+        evidence: [],
+      },
+    ],
     budgetExceeded: false,
-    elapsed: 0,
+    elapsed: 17,
   }),
 }));
 
@@ -152,5 +165,100 @@ describe("orchestrate _cliproxyActive", () => {
       const config = launchClaude.mock.calls[0][0];
       expect(config._cliproxyActive).toBe(false);
     }
+  });
+});
+// ---------------------------------------------------------------------------
+// --eval-mode tests (Wave 11-B1)
+// ---------------------------------------------------------------------------
+
+describe("orchestrate --eval-mode", () => {
+  let stdoutSpy;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default runTiers mock — without this, clearAllMocks leaves runTiers
+    // returning undefined and the shape test sees an empty results array.
+    runTiers.mockResolvedValue({
+      results: [
+        { tierId: "t0-rtk", tierName: "RTK", severity: "pass", evidence: [], durationMs: 1 },
+        { tierId: "t1-env", tierName: "ENV", severity: "info", evidence: [], durationMs: 1 },
+        {
+          tierId: "t2-cliproxy",
+          tierName: "CLIProxy",
+          severity: "warn",
+          evidence: [{ check: "x", actual: "y", remediation: "z" }],
+          durationMs: 1,
+        },
+        {
+          tierId: "t3-cli",
+          tierName: "CLI",
+          severity: "warn",
+          evidence: [{ check: "x", actual: "y", remediation: "z" }],
+          durationMs: 1,
+        },
+      ],
+      budgetExceeded: false,
+      elapsed: 4,
+    });
+    // Capture process.stdout.write calls so we can inspect the JSON emitted
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+  });
+
+  it("emits valid JSON to stdout with schema vein-eval-v1", async () => {
+    const code = await orchestrate(["--eval-mode", "--mode=fast"]);
+    expect(code).toBe(0);
+
+    // Find the JSON write call
+    const written = stdoutSpy.mock.calls.map((c) => c[0]).join("");
+    const parsed = JSON.parse(written.trim());
+
+    expect(parsed.schema).toBe("vein-eval-v1");
+    expect(parsed.version).toBe("1.0");
+    expect(parsed.mode).toBe("fast");
+    expect(Array.isArray(parsed.results)).toBe(true);
+  });
+
+  it("emits result entries with required shape (tierId, severity, durationMs, hasEvidence)", async () => {
+    await orchestrate(["--eval-mode", "--mode=fast"]);
+
+    const written = stdoutSpy.mock.calls.map((c) => c[0]).join("");
+    const parsed = JSON.parse(written.trim());
+
+    expect(parsed.results.length).toBeGreaterThan(0);
+    for (const r of parsed.results) {
+      expect(typeof r.tierId).toBe("string");
+      expect(typeof r.severity).toBe("string");
+      expect(typeof r.durationMs).toBe("number");
+      expect(typeof r.hasEvidence).toBe("boolean");
+    }
+  });
+
+  it("does NOT call launchClaude in --eval-mode", async () => {
+    await orchestrate(["--eval-mode", "--mode=fast"]);
+    expect(launchClaude).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call persistResults in --eval-mode", async () => {
+    const { persistResults } = await import("../src/lib/persist.mjs");
+    await orchestrate(["--eval-mode", "--mode=fast"]);
+    expect(persistResults).not.toHaveBeenCalled();
+  });
+
+  it("returns CONFIG_INVALID (3) for invalid mode in --eval-mode", async () => {
+    const code = await orchestrate(["--eval-mode", "--mode=invalid"]);
+    expect(code).toBe(3);
+
+    const written = stdoutSpy.mock.calls.map((c) => c[0]).join("");
+    const parsed = JSON.parse(written.trim());
+    expect(typeof parsed.error).toBe("string");
+  });
+
+  it("calls runTiers once in --eval-mode (reuses existing tier-runner logic)", async () => {
+    await orchestrate(["--eval-mode", "--mode=fast"]);
+    expect(runTiers).toHaveBeenCalledTimes(1);
   });
 });

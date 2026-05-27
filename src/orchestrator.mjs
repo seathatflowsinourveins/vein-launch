@@ -15,6 +15,43 @@ import { runTiers } from "./lib/runner.mjs";
 import { OPERABLE_SEVERITIES } from "./lib/unleash-gate.mjs";
 
 export async function orchestrate(args) {
+  // --eval-mode: emit machine-readable JSON tier results to stdout, then exit.
+  // No Claude launch, no persist side-effects. Consumed by promptfoo exec provider.
+  if (args.includes("--eval-mode")) {
+    const evalArgs = args.filter((a) => a !== "--eval-mode");
+    let evalConfig;
+    try {
+      evalConfig = await loadConfig(evalArgs.filter((a) => a !== "--ci"));
+    } catch (err) {
+      process.stdout.write(`${JSON.stringify({ error: err.message, schema: "vein-eval-v1" })}\n`);
+      return ExitCodes.CONFIG_INVALID;
+    }
+
+    if (evalConfig._configError) {
+      process.stdout.write(
+        `${JSON.stringify({ error: evalConfig._configError, schema: "vein-eval-v1" })}\n`,
+      );
+      return ExitCodes.CONFIG_INVALID;
+    }
+
+    const evalRunResult = await runTiers(evalConfig);
+    process.stdout.write(
+      `${JSON.stringify({
+        version: "1.0",
+        schema: "vein-eval-v1",
+        project: evalConfig.projectDir ?? null,
+        mode: evalConfig.mode,
+        results: evalRunResult.results.map((r) => ({
+          tierId: r.tierId,
+          severity: r.severity,
+          durationMs: r.durationMs,
+          hasEvidence: Array.isArray(r.evidence) && r.evidence.length > 0,
+        })),
+      })}\n`,
+    );
+    return ExitCodes.SUCCESS;
+  }
+
   const isCi = args.includes("--ci");
 
   let config;

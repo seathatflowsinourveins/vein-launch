@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "dimensions": {
+    "tier_activation": { "weight": 0.3 },
+    "exit_code_contract": { "weight": 0.25 },
+    "result_shape": { "weight": 0.2 },
+    "fast_mode_budget": { "weight": 0.15 },
+    "json_validity": { "weight": 0.1 }
+  },
+  "pass_threshold": 0.8,
+  "block_threshold": 0.7
+}
