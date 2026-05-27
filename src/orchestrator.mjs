@@ -1,6 +1,6 @@
 /**
  * Orchestrator — mode router + tier sequencer + result persistence + claude launch.
- * Entry point called by bin/vein.ps1 via `node src/orchestrator.mjs`.
+ * Pure function: takes args array, returns exit code. No process.argv access.
  *
  * 12-Factor Agent compliance: F5 (persist state), F8 (own control flow), F11 (CI trigger), F12 (stateless reducer).
  */
@@ -29,6 +29,12 @@ export async function orchestrate(args) {
     if (isCi) console.log(JSON.stringify({ error: config._configError }));
     else console.error(`[vein] Invalid arguments: ${config._configError}`);
     return ExitCodes.CONFIG_INVALID;
+  }
+
+  // Command-mode requests (--status, --setup, --projects, --accounts) are
+  // informational only — no tier execution needed.
+  if (config.args?.command) {
+    return ExitCodes.SUCCESS;
   }
 
   const runResult = await runTiers(config);
@@ -62,15 +68,3 @@ export async function orchestrate(args) {
 
   return ExitCodes.SUCCESS;
 }
-
-const args = process.argv.slice(2);
-if (args.includes("--eval") || args.includes("--eval-mode")) {
-  process.exit(0);
-}
-
-orchestrate(args)
-  .then((code) => process.exit(code))
-  .catch((err) => {
-    console.error(`[vein] Internal error: ${err.message}`);
-    process.exit(ExitCodes.INTERNAL_ERROR);
-  });

@@ -122,7 +122,9 @@ export function parseArgs(args) {
     }
   }
 
-  if (result.mode && !result.project && !result.command) {
+  // deep and repair are network/long operations that require an explicit project.
+  // fast mode is allowed without a project (uses cwd).
+  if ((result.mode === "deep" || result.mode === "repair") && !result.project && !result.command) {
     return { ...result, error: `--${result.mode} requires a project name` };
   }
 

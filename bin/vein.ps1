@@ -60,7 +60,7 @@ if ($Repair) { $mode = 'repair' }
 elseif ($Deep) { $mode = 'deep' }
 
 # Delegate to Node orchestrator
-$orchestrator = Join-Path $RepoRoot 'src' 'orchestrator.mjs'
+$orchestrator = Join-Path $RepoRoot 'src' 'cli.mjs'
 $nodeArgs = @($orchestrator)
 
 if ($Setup) { $nodeArgs += '--setup' }
