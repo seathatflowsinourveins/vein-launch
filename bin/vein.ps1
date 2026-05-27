@@ -44,9 +44,19 @@ param(
 $ErrorActionPreference = 'Stop'
 $ScriptRoot = $PSScriptRoot
 
+# PowerShell binds positional parameters BEFORE ValueFromRemainingArguments.
+# So `vein --version` puts `--version` into $Project (positional 0), not
+# $PassThrough. Rescue any dash-prefixed value out of $Project so the
+# long-flag detection below can see it.
+if ($Project -and $Project.StartsWith('-')) {
+  if (-not $PassThrough) { $PassThrough = @() }
+  $PassThrough = @($Project) + $PassThrough
+  $Project = $null
+}
+
 # Accept POSIX-style long flags as aliases for the PowerShell switches above.
-# Without this, `vein --version` lands in $PassThrough and is forwarded to node,
-# which then sees both --mode=fast AND --version and rejects it as conflicting.
+# Without this, `vein --version` would be forwarded to node alongside
+# --mode=fast and rejected as conflicting.
 if ($PassThrough) {
   if ($PassThrough -contains '--version' -or $PassThrough -contains '-v') { $Version = $true }
   if ($PassThrough -contains '--help' -or $PassThrough -contains '-h')    { $Help    = $true }

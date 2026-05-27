@@ -23,34 +23,43 @@ import { delimiter, isAbsolute, sep } from "node:path";
  */
 
 /**
- * Resolve a bare command name to an extension-suffixed path on Windows.
+ * Resolve a bare command name on Windows.
  *
- * Background: with shell:false (our security-hardened default), Node's
- * execFile does NOT consult PATHEXT — `pm2`, `codex`, `gh`, etc. are
- * .cmd shims installed by npm and won't be found by their bare name.
- * shell:true would resolve them but reintroduces injection risk.
+ * Returns `{ cmd, needsShell }`:
+ *   - cmd:        extension-suffixed name (or input unchanged)
+ *   - needsShell: true when the resolved file is .cmd/.bat (Node refuses to
+ *                 spawn these without shell:true — spawn EINVAL otherwise).
  *
- * This function walks PATH looking for `<cmd>.cmd`, `<cmd>.exe`, `<cmd>.bat`,
- * `<cmd>.com` in order. On non-Windows or when cmd already has an extension
- * or is absolute, returns it unchanged.
+ * Background: with shell:false (security-hardened default), Node's execFile
+ * does NOT consult PATHEXT — `pm2`, `codex`, `gh` etc. are .cmd shims
+ * installed by npm and won't be found by bare name. Additionally, Node
+ * cannot directly spawn .cmd/.bat files on Windows (per Node docs); they
+ * REQUIRE cmd.exe via shell:true to interpret. We use shell:true narrowly
+ * for these shim files only, with args passed as an array so Node properly
+ * quotes them — preserving most injection safety.
  *
  * @param {string} cmd
- * @returns {string}
+ * @returns {{ cmd: string, needsShell: boolean }}
  */
 function resolveCommand(cmd) {
-  if (process.platform !== "win32") return cmd;
-  if (isAbsolute(cmd) || /\.(exe|cmd|bat|com)$/i.test(cmd) || cmd.includes(sep)) {
-    return cmd;
+  if (process.platform !== "win32") return { cmd, needsShell: false };
+  if (isAbsolute(cmd) || cmd.includes(sep)) {
+    return { cmd, needsShell: /\.(cmd|bat)$/i.test(cmd) };
+  }
+  if (/\.(exe|cmd|bat|com)$/i.test(cmd)) {
+    return { cmd, needsShell: /\.(cmd|bat)$/i.test(cmd) };
   }
   const exts = [".cmd", ".exe", ".bat", ".com"];
   const dirs = (process.env.PATH || "").split(delimiter).filter(Boolean);
   for (const dir of dirs) {
     for (const ext of exts) {
       const candidate = `${dir}${sep}${cmd}${ext}`;
-      if (existsSync(candidate)) return `${cmd}${ext}`;
+      if (existsSync(candidate)) {
+        return { cmd: `${cmd}${ext}`, needsShell: ext === ".cmd" || ext === ".bat" };
+      }
     }
   }
-  return cmd; // give up; execFile will surface the ENOENT
+  return { cmd, needsShell: false }; // give up; execFile will surface ENOENT
 }
 
 /**
@@ -87,14 +96,20 @@ function makeCallback(resolve) {
 export function exec(command, options = {}) {
   const { timeout = 10_000, cwd, shellMode = false } = options;
   const parts = command.split(/\s+/).filter(Boolean);
-  const cmd = shellMode ? parts[0] : resolveCommand(parts[0]);
+  let cmd = parts[0];
+  let useShell = shellMode;
+  if (!shellMode) {
+    const r = resolveCommand(parts[0]);
+    cmd = r.cmd;
+    useShell = r.needsShell; // .cmd/.bat REQUIRE shell:true on Windows
+  }
   const args = parts.slice(1);
 
   return new Promise((resolve) => {
     execFile(
       cmd,
       args,
-      { timeout, cwd, shell: shellMode, windowsHide: true },
+      { timeout, cwd, shell: useShell, windowsHide: true },
       makeCallback(resolve),
     );
   });
@@ -114,13 +129,19 @@ export function exec(command, options = {}) {
  */
 export function execArgs(cmd, args = [], options = {}) {
   const { timeout = 10_000, cwd, shellMode = false } = options;
-  const resolved = shellMode ? cmd : resolveCommand(cmd);
+  let resolved = cmd;
+  let useShell = shellMode;
+  if (!shellMode) {
+    const r = resolveCommand(cmd);
+    resolved = r.cmd;
+    useShell = r.needsShell; // .cmd/.bat REQUIRE shell:true on Windows
+  }
 
   return new Promise((resolve) => {
     execFile(
       resolved,
       args,
-      { timeout, cwd, shell: shellMode, windowsHide: true },
+      { timeout, cwd, shell: useShell, windowsHide: true },
       makeCallback(resolve),
     );
   });
