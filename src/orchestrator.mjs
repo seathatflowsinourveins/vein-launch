@@ -12,6 +12,7 @@ import { persistResults } from "./lib/persist.mjs";
 import { report } from "./lib/reporter.mjs";
 import { ExitCodes, Severity, worstSeverity } from "./lib/result.mjs";
 import { runTiers } from "./lib/runner.mjs";
+import { OPERABLE_SEVERITIES } from "./lib/unleash-gate.mjs";
 
 export async function orchestrate(args) {
   const isCi = args.includes("--ci");
@@ -59,7 +60,12 @@ export async function orchestrate(args) {
 
   if (!isCi && config.projectDir) {
     const t2Result = results.find((r) => r.tierId === "t2-cliproxy");
-    const cliproxyActive = t2Result?.severity === Severity.PASS;
+    // Use the same OPERABLE_SEVERITIES allow-list as the unleash-gate (PASS | INFO | WARN | SKIP).
+    // Previously this was `t2Result?.severity === Severity.PASS` which was dead code on real
+    // machines: post-/healthz fix, T2 returns WARN (cliproxy responds but body parse is loose),
+    // so bypass mode never activated and CLIProxy routing was always skipped.
+    const cliproxyActive =
+      t2Result != null && OPERABLE_SEVERITIES.has(String(t2Result.severity ?? "").toLowerCase());
     const launchConfig = { ...config, _cliproxyActive: cliproxyActive };
     try {
       await launchClaude(launchConfig, config.args?.passThrough ?? []);

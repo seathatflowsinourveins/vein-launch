@@ -1,9 +1,15 @@
 /**
  * Dual-model pre-merge quality gate.
- * Runs Codex (GPT-5.5) and Claude self-review in parallel, compares findings.
+ * Runs two independent Codex (GPT-5.5) review passes in parallel and compares findings.
+ *
+ * Previously this file invoked `claude --review --output json`, which is NOT a real Claude Code
+ * CLI subcommand and caused the gate to always return passed=false silently. It is now replaced
+ * with a second `codex review` pass (same model, same effort) for a true dual-pass gate.
+ *
+ * Security: all arguments are passed as arrays via execArgs (shell:false).
  */
 
-import { exec } from "../lib/shell.mjs";
+import { execArgs } from "../lib/shell.mjs";
 
 /**
  * @typedef {Object} ShipGateResult
@@ -15,18 +21,34 @@ import { exec } from "../lib/shell.mjs";
  */
 
 /**
- * Run both Codex and Claude review in parallel and compare findings.
+ * Build the codex review args array for the given model and effort.
+ * Uses `-c key=value` config overrides (not --model/--effort flags which don't exist on `review`).
+ *
+ * @param {string} model
+ * @param {string} effort
+ * @returns {string[]}
+ */
+function codexReviewArgs(model, effort) {
+  return ["review", "-c", `model="${model}"`, "-c", `effort="${effort}"`];
+}
+
+/**
+ * Run two independent Codex review passes in parallel and compare findings.
  * @param {Object} options
+ * @param {string} [options.model="gpt-5.5"]
+ * @param {string} [options.effort="xhigh"]
  * @param {number} [options.timeout=180000]
  * @returns {Promise<ShipGateResult>}
  */
 export async function runShipGate(options = {}) {
-  const { timeout = 180_000 } = options;
+  const { model = "gpt-5.5", effort = "xhigh", timeout = 180_000 } = options;
   const start = performance.now();
 
+  // Two independent codex review passes — no claude CLI involved.
+  const args = codexReviewArgs(model, effort);
   const [codexResult, claudeResult] = await Promise.all([
-    exec("codex --review --model gpt-5.5 --effort xhigh", { timeout }),
-    exec("claude --review --output json", { timeout }),
+    execArgs("codex", args, { timeout }),
+    execArgs("codex", args, { timeout }),
   ]);
 
   const codexFailed = !codexResult.ok;
@@ -36,7 +58,7 @@ export async function runShipGate(options = {}) {
 
   const consensus = [];
   if (codexFailed) consensus.push("codex review failed — gate blocked");
-  if (claudeFailed) consensus.push("claude review failed — gate blocked");
+  if (claudeFailed) consensus.push("codex review failed — gate blocked");
   if (!codexFailed && codexFindings === 0 && !claudeFailed && claudeFindings === 0)
     consensus.push("both models approve");
   if (codexFindings > 0) consensus.push(`codex: ${codexFindings} finding(s)`);

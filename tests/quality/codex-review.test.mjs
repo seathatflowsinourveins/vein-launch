@@ -2,16 +2,18 @@
  * Tests for src/quality/codex-review.mjs
  *
  * shell.mjs is mocked so no real `codex` binary is required.
+ * runCodexReview now uses execArgs (array form, shell:false).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock shell before importing the module under test
+// Mock shell before importing the module under test — expose both exec and execArgs
 vi.mock("../../src/lib/shell.mjs", () => ({
   exec: vi.fn(),
+  execArgs: vi.fn(),
 }));
 
-import { exec } from "../../src/lib/shell.mjs";
+import { execArgs } from "../../src/lib/shell.mjs";
 import { parseCodexOutput, runCodexReview } from "../../src/quality/codex-review.mjs";
 
 // ---------------------------------------------------------------------------
@@ -35,47 +37,56 @@ describe("runCodexReview", () => {
     vi.clearAllMocks();
   });
 
-  it("calls exec with correct model and effort defaults", async () => {
-    exec.mockResolvedValue(makeExecOk());
+  it("calls execArgs with 'codex' and 'review' subcommand", async () => {
+    execArgs.mockResolvedValue(makeExecOk());
     await runCodexReview();
-    expect(exec).toHaveBeenCalledOnce();
-    const [cmd] = exec.mock.calls[0];
-    expect(cmd).toContain("codex --review");
-    expect(cmd).toContain("--model gpt-5.5");
-    expect(cmd).toContain("--effort xhigh");
+    expect(execArgs).toHaveBeenCalledOnce();
+    const [cmd, args] = execArgs.mock.calls[0];
+    expect(cmd).toBe("codex");
+    expect(args[0]).toBe("review");
   });
 
-  it("passes custom model and effort through to exec", async () => {
-    exec.mockResolvedValue(makeExecOk());
+  it("passes default model gpt-5.5 and effort xhigh as -c flags", async () => {
+    execArgs.mockResolvedValue(makeExecOk());
+    await runCodexReview();
+    const [, args] = execArgs.mock.calls[0];
+    const argsStr = args.join(" ");
+    expect(argsStr).toContain("gpt-5.5");
+    expect(argsStr).toContain("xhigh");
+  });
+
+  it("passes custom model and effort through to execArgs", async () => {
+    execArgs.mockResolvedValue(makeExecOk());
     await runCodexReview({ model: "gpt-4o", effort: "low" });
-    const [cmd] = exec.mock.calls[0];
-    expect(cmd).toContain("--model gpt-4o");
-    expect(cmd).toContain("--effort low");
+    const [, args] = execArgs.mock.calls[0];
+    const argsStr = args.join(" ");
+    expect(argsStr).toContain("gpt-4o");
+    expect(argsStr).toContain("low");
   });
 
-  it("passes custom timeout to exec", async () => {
-    exec.mockResolvedValue(makeExecOk());
+  it("passes custom timeout to execArgs options", async () => {
+    execArgs.mockResolvedValue(makeExecOk());
     await runCodexReview({ timeout: 5000 });
-    const [, opts] = exec.mock.calls[0];
+    const [, , opts] = execArgs.mock.calls[0];
     expect(opts.timeout).toBe(5000);
   });
 
   it("returns ok:true when exec succeeds and no blockers are found", async () => {
-    exec.mockResolvedValue(makeExecOk("INFO src/foo.mjs:1 - looks good"));
+    execArgs.mockResolvedValue(makeExecOk("INFO src/foo.mjs:1 - looks good"));
     const result = await runCodexReview();
     expect(result.ok).toBe(true);
     expect(result.blockers).toBe(0);
   });
 
   it("returns ok:false when exec succeeds but blockers are found", async () => {
-    exec.mockResolvedValue(makeExecOk("BLOCKER src/foo.mjs:10 - null deref"));
+    execArgs.mockResolvedValue(makeExecOk("BLOCKER src/foo.mjs:10 - null deref"));
     const result = await runCodexReview();
     expect(result.ok).toBe(false);
     expect(result.blockers).toBe(1);
   });
 
   it("returns ok:false when exec itself fails (non-zero exit)", async () => {
-    exec.mockResolvedValue(makeExecFail());
+    execArgs.mockResolvedValue(makeExecFail());
     const result = await runCodexReview();
     expect(result.ok).toBe(false);
     expect(result.findings).toHaveLength(0);
@@ -88,7 +99,7 @@ describe("runCodexReview", () => {
       "WARNING src/c.mjs:3 - caution",
       "INFO src/d.mjs - fyi",
     ].join("\n");
-    exec.mockResolvedValue(makeExecOk(stdout));
+    execArgs.mockResolvedValue(makeExecOk(stdout));
     const result = await runCodexReview();
     expect(result.blockers).toBe(2);
     expect(result.warnings).toBe(1);
@@ -96,7 +107,7 @@ describe("runCodexReview", () => {
   });
 
   it("includes a numeric duration in milliseconds", async () => {
-    exec.mockResolvedValue(makeExecOk());
+    execArgs.mockResolvedValue(makeExecOk());
     const result = await runCodexReview();
     expect(typeof result.duration).toBe("number");
     expect(result.duration).toBeGreaterThanOrEqual(0);
