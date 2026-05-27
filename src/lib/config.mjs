@@ -116,6 +116,10 @@ export function parseArgs(args) {
     i++;
   }
 
+  if (result.command && result.mode) {
+    return { ...result, error: `--${result.command} cannot be combined with --${result.mode}` };
+  }
+
   if (result.command && result.project) {
     if (result.command === "setup") {
       return { ...result, error: "--setup is global, not per-project" };
