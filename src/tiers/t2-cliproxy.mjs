@@ -52,13 +52,37 @@ async function checkHttp(port) {
     const res = await fetch(`http://localhost:${port}/health`, {
       signal: AbortSignal.timeout(3000),
     });
-    const body = await res.json();
+    let body = null;
+    try {
+      body = await res.json();
+    } catch {
+      return {
+        ok: false,
+        body: null,
+        evidence: {
+          check: "cliproxy-health",
+          actual: `Health endpoint returned non-JSON response (HTTP ${res.status})`,
+          remediation: `Check CLIProxy health endpoint on port ${port} — expected JSON with status field`,
+        },
+      };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        body,
+        evidence: {
+          check: "cliproxy-health",
+          actual: `HTTP ${res.status} — status: ${body?.status ?? "unknown"}`,
+          remediation: `CLIProxy health check failed (HTTP ${res.status}). Check logs and restart.`,
+        },
+      };
+    }
     return {
-      ok: res.ok,
+      ok: true,
       body,
       evidence: {
         check: "cliproxy-health",
-        actual: `HTTP ${res.ok ? "ok" : "error"} — status: ${body?.status ?? "unknown"}`,
+        actual: `HTTP ok — status: ${body?.status ?? "unknown"}`,
       },
     };
   } catch (err) {

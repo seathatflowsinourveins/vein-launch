@@ -148,14 +148,14 @@ describe("repair", () => {
 
   it("prunes stale files older than 7 days", async () => {
     const now = Date.now();
-    const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000);
-    const recentDate = new Date(now - 1 * 24 * 60 * 60 * 1000);
+    const eightDaysMs = 8 * 24 * 60 * 60 * 1000;
+    const oneDayMs = 1 * 24 * 60 * 60 * 1000;
 
     fs.existsSync.mockReturnValue(true);
     fs.readdirSync.mockReturnValue(["stale.json", "fresh.json"]);
     fs.statSync.mockImplementation((p) => {
-      if (String(p).includes("stale")) return { mtime: eightDaysAgo };
-      return { mtime: recentDate };
+      if (String(p).includes("stale")) return { isFile: () => true, mtimeMs: now - eightDaysMs };
+      return { isFile: () => true, mtimeMs: now - oneDayMs };
     });
 
     await repair(mockConfig, fastContext);
@@ -177,5 +177,58 @@ describe("repair", () => {
     fs.readdirSync.mockReturnValue([]);
     const result = await repair(mockConfig, fastContext);
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("returns BLOCK when mkdirSync throws EACCES", async () => {
+    fs.existsSync.mockReturnValue(false);
+    fs.mkdirSync.mockImplementation(() => {
+      throw new Error("EACCES: permission denied");
+    });
+    const result = await repair(mockConfig, fastContext);
+    expect(result.severity).toBe(Severity.BLOCK);
+    expect(result.evidence[0].remediation).toBeTruthy();
+  });
+
+  it("returns WARN when readdirSync throws", async () => {
+    fs.existsSync.mockReturnValue(true);
+    fs.readdirSync.mockImplementation(() => {
+      throw new Error("EPERM: operation not permitted");
+    });
+    const result = await repair(mockConfig, fastContext);
+    expect(result.severity).toBe(Severity.WARN);
+    expect(result.evidence[0].remediation).toBeTruthy();
+  });
+
+  it("reports errors but still returns WARN when unlinkSync fails on stale file", async () => {
+    const now = Date.now();
+    const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000);
+    fs.existsSync.mockReturnValue(true);
+    fs.readdirSync.mockReturnValue(["stale.json"]);
+    fs.statSync.mockReturnValue({ isFile: () => true, mtimeMs: eightDaysAgo.getTime() });
+    fs.unlinkSync.mockImplementation(() => {
+      throw new Error("EPERM");
+    });
+    const result = await repair(mockConfig, fastContext);
+    expect(result.severity).toBe(Severity.WARN);
+    expect(result.evidence[0].actual).toContain("error");
+  });
+
+  it("skips entries with path traversal characters", async () => {
+    fs.existsSync.mockReturnValue(true);
+    fs.readdirSync.mockReturnValue(["../etc/passwd", "normal.json"]);
+    fs.statSync.mockReturnValue({ isFile: () => true, mtimeMs: 0 });
+    await repair(mockConfig, fastContext);
+    expect(fs.unlinkSync).toHaveBeenCalledTimes(1);
+    expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining("normal.json"));
+  });
+
+  it("only prunes files, not directories", async () => {
+    const now = Date.now();
+    const eightDaysAgo = new Date(now - 8 * 24 * 60 * 60 * 1000);
+    fs.existsSync.mockReturnValue(true);
+    fs.readdirSync.mockReturnValue(["subdir"]);
+    fs.statSync.mockReturnValue({ isFile: () => false, mtimeMs: eightDaysAgo.getTime() });
+    await repair(mockConfig, fastContext);
+    expect(fs.unlinkSync).not.toHaveBeenCalled();
   });
 });

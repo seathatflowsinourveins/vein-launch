@@ -152,6 +152,42 @@ describe("t2-cliproxy", () => {
       expect(result.evidence[0].remediation).toBeTruthy();
     });
 
+    it("BLOCKs when health endpoint returns non-2xx status", async () => {
+      exec.mockResolvedValueOnce({
+        ok: true,
+        stdout: "status      | online",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+      const mockJson = vi.fn().mockResolvedValue({ status: "error" });
+      fetch.mockResolvedValueOnce({ ok: false, status: 503, json: mockJson });
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
+
+      expect(result.severity).toBe(Severity.BLOCK);
+      expect(result.evidence[0].remediation).toBeTruthy();
+    });
+
+    it("BLOCKs when health endpoint returns invalid JSON", async () => {
+      exec.mockResolvedValueOnce({
+        ok: true,
+        stdout: "status      | online",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+      const mockJson = vi.fn().mockRejectedValue(new SyntaxError("Unexpected token"));
+      fetch.mockResolvedValueOnce({ ok: true, status: 200, json: mockJson });
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
+
+      expect(result.severity).toBe(Severity.BLOCK);
+      expect(result.evidence[0].remediation).toBeTruthy();
+    });
+
     it("WARNs when no accounts configured in health response", async () => {
       exec.mockResolvedValueOnce({
         ok: true,

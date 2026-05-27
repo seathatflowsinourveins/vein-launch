@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createResult, Severity } from "../lib/result.mjs";
 
 export const meta = { id: "t1-env", name: "ENV", modes: ["fast", "deep", "repair"] };
@@ -167,31 +167,76 @@ export async function repair(_config, _context) {
   const start = performance.now();
   const dir = stateDir();
 
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+  try {
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+  } catch (err) {
+    return createResult({
+      tierId: meta.id,
+      tierName: meta.name,
+      severity: Severity.BLOCK,
+      evidence: [
+        {
+          check: "state-dir-create",
+          actual: `Failed to create ${dir}: ${err.message}`,
+          remediation: `Manually create ${dir} and ensure write permissions`,
+        },
+      ],
+      durationMs: performance.now() - start,
+    });
   }
 
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   const cutoff = Date.now() - sevenDaysMs;
-  const entries = readdirSync(dir);
+  let pruned = 0;
+  let errors = 0;
 
-  for (const entry of entries) {
-    const filePath = join(dir, entry);
-    try {
-      const { mtime } = statSync(filePath);
-      if (mtime.getTime() < cutoff) {
-        unlinkSync(filePath);
+  try {
+    const entries = readdirSync(dir);
+    for (const entry of entries) {
+      if (entry.includes("..") || entry.includes("/") || entry.includes("\\")) continue;
+      const filePath = join(dir, entry);
+      const resolved = resolve(filePath);
+      if (!resolved.startsWith(resolve(dir))) continue;
+      try {
+        const stat = statSync(filePath);
+        if (stat.isFile() && stat.mtimeMs < cutoff) {
+          unlinkSync(filePath);
+          pruned++;
+        }
+      } catch {
+        errors++;
       }
-    } catch {
-      // skip files we can't stat
     }
+  } catch (err) {
+    return createResult({
+      tierId: meta.id,
+      tierName: meta.name,
+      severity: Severity.WARN,
+      evidence: [
+        {
+          check: "state-dir-prune",
+          actual: `Failed to read ${dir}: ${err.message}`,
+          remediation: "Check permissions on ~/.vein/ directory",
+        },
+      ],
+      durationMs: performance.now() - start,
+    });
   }
 
+  const summary = `${dir} ensured, ${pruned} stale file(s) pruned${errors > 0 ? `, ${errors} error(s)` : ""}`;
   return createResult({
     tierId: meta.id,
     tierName: meta.name,
-    severity: Severity.PASS,
-    evidence: [{ check: "state-dir-repair", actual: `${dir} ensured, stale files pruned` }],
+    severity: errors > 0 ? Severity.WARN : Severity.PASS,
+    evidence: [
+      {
+        check: "state-dir-repair",
+        actual: summary,
+        ...(errors > 0 ? { remediation: "Check file permissions in ~/.vein/" } : {}),
+      },
+    ],
     durationMs: performance.now() - start,
   });
 }

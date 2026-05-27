@@ -29,9 +29,9 @@ export function compareVersions(actual, minimum) {
   return 0;
 }
 
-/** Extract semver string from command output. @returns {string | null} */
+/** Extract semver string from command output, rejecting 4+ segments. @returns {string | null} */
 function parseVersion(output) {
-  const m = output.match(/(\d+\.\d+\.\d+)/);
+  const m = output.match(/(?<![.\d])(\d+\.\d+\.\d+)(?=[^.\d]|$)/);
   return m ? m[1] : null;
 }
 
