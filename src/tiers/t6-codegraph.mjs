@@ -1,9 +1,9 @@
 import { createResult, Severity } from "../lib/result.mjs";
 import { exec } from "../lib/shell.mjs";
 
-export const meta = { id: "t6-codegraph", name: "CodeGraph", modes: ["repair"] };
+export const meta = { id: "t6-codegraph", name: "CodeGraph", modes: ["deep", "repair"] };
 
-export async function check(config, context) {
+export async function check(_config, _context) {
   const start = performance.now();
   const evidence = [];
 
@@ -56,18 +56,24 @@ export async function check(config, context) {
   });
 }
 
-export async function repair(config, context) {
+export async function repair(_config, _context) {
   const start = performance.now();
   const result = await exec("npx gitnexus@1.6.5 analyze");
   return createResult({
     tierId: meta.id,
     tierName: meta.name,
-    severity: result.ok ? Severity.PASS : Severity.INFO,
+    severity: result.ok ? Severity.PASS : Severity.BLOCK,
     evidence: [
-      {
-        check: "gitnexus-reindex",
-        actual: result.ok ? "reindex triggered" : "reindex skipped (non-blocking)",
-      },
+      result.ok
+        ? {
+            check: "gitnexus-reindex",
+            actual: "reindex triggered successfully",
+          }
+        : {
+            check: "gitnexus-reindex",
+            actual: "gitnexus analyze failed",
+            remediation: "Run `npx gitnexus@1.6.5 analyze` manually to reindex the repository",
+          },
     ],
     durationMs: performance.now() - start,
   });
