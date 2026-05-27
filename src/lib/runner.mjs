@@ -2,6 +2,7 @@
  * Tier runner — executes tier sequence within mode budget.
  */
 
+import { evaluateBlockRules } from "./block-engine.mjs";
 import { createResult, Severity } from "./result.mjs";
 
 const TIER_MODULES = {
@@ -47,7 +48,7 @@ export async function runTiers(config) {
     try {
       const mod = await import(TIER_MODULES[tierId]);
       const result = await runWithTimeout(
-        () => mod.check(config, { budget: tierBudget }),
+        () => mod.check(config, { budget: tierBudget, mode: config.mode }),
         tierBudget,
         tierId,
       );
@@ -58,7 +59,7 @@ export async function runTiers(config) {
         const remainingBudget = budget - elapsed - (performance.now() - start);
         if (remainingBudget > 0) {
           const repairResult = await runWithTimeout(
-            () => mod.repair(config, { budget: remainingBudget }),
+            () => mod.repair(config, { budget: remainingBudget, mode: config.mode }),
             remainingBudget,
             tierId,
           );
@@ -82,7 +83,8 @@ export async function runTiers(config) {
     elapsed += performance.now() - start;
   }
 
-  return { results, budgetExceeded, elapsed: Math.round(elapsed) };
+  const triggeredRules = evaluateBlockRules(results);
+  return { results, budgetExceeded, elapsed: Math.round(elapsed), triggeredRules };
 }
 
 async function runWithTimeout(fn, budgetMs, tierId) {
