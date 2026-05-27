@@ -29,16 +29,21 @@ export async function runShipGate(options = {}) {
     exec("claude --review --output json", { timeout }),
   ]);
 
-  const codexFindings = codexResult.ok ? countFindings(codexResult.stdout) : 0;
-  const claudeFindings = claudeResult.ok ? countFindings(claudeResult.stdout) : 0;
+  const codexFailed = !codexResult.ok;
+  const claudeFailed = !claudeResult.ok;
+  const codexFindings = codexResult.ok ? countFindings(codexResult.stdout) : -1;
+  const claudeFindings = claudeResult.ok ? countFindings(claudeResult.stdout) : -1;
 
   const consensus = [];
-  if (codexFindings === 0 && claudeFindings === 0) consensus.push("both models approve");
+  if (codexFailed) consensus.push("codex review failed — gate blocked");
+  if (claudeFailed) consensus.push("claude review failed — gate blocked");
+  if (!codexFailed && codexFindings === 0 && !claudeFailed && claudeFindings === 0)
+    consensus.push("both models approve");
   if (codexFindings > 0) consensus.push(`codex: ${codexFindings} finding(s)`);
   if (claudeFindings > 0) consensus.push(`claude: ${claudeFindings} finding(s)`);
 
   return {
-    passed: codexFindings === 0 && claudeFindings === 0,
+    passed: !codexFailed && !claudeFailed && codexFindings === 0 && claudeFindings === 0,
     codexFindings,
     claudeFindings,
     consensus,

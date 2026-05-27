@@ -74,12 +74,13 @@ describe("runShipGate", () => {
     expect(result.consensus).not.toContain("both models approve");
   });
 
-  it("handles exec failure gracefully — returns 0 findings for failed exec", async () => {
+  it("fails closed when exec errors — passed is false", async () => {
     exec.mockResolvedValue(makeExecResult("", false));
     const result = await runShipGate();
-    expect(result.codexFindings).toBe(0);
-    expect(result.claudeFindings).toBe(0);
-    expect(result.passed).toBe(true);
+    expect(result.codexFindings).toBe(-1);
+    expect(result.claudeFindings).toBe(-1);
+    expect(result.passed).toBe(false);
+    expect(result.consensus).toContain("codex review failed — gate blocked");
   });
 
   it("duration is non-negative", async () => {

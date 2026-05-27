@@ -5,7 +5,7 @@
  * All filesystem and os.homedir() calls are mocked so tests never touch disk.
  */
 
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:fs", () => ({
@@ -185,16 +185,19 @@ describe("removeProject", () => {
 describe("resolveProject", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns the registered path for a known alias", () => {
+  it("returns the canonicalized registered path for a known alias", () => {
     setRegistry({ trading: "/projects/trading" });
-    expect(resolveProject("trading")).toBe("/projects/trading");
+    const result = resolveProject("trading");
+    expect(result).toBeTruthy();
+    expect(result.endsWith("projects" + sep + "trading")).toBe(true);
   });
 
-  it("returns the path itself if it exists on disk (not in registry)", () => {
+  it("returns the canonicalized path if it exists on disk (not in registry)", () => {
     setRegistry({});
-    // Second existsSync call (for nameOrPath) returns true
-    fs.existsSync.mockImplementation((p) => p === "/actual/path/on/disk");
-    expect(resolveProject("/actual/path/on/disk")).toBe("/actual/path/on/disk");
+    fs.existsSync.mockImplementation((p) => String(p).includes("actual"));
+    const result = resolveProject("/actual/path/on/disk");
+    expect(result).toBeTruthy();
+    expect(result.endsWith("disk")).toBe(true);
   });
 
   it("returns null for an unknown name that does not exist on disk", () => {

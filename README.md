@@ -65,11 +65,13 @@ Manages API proxy for prompt caching and account rotation:
 
 ## Quality Gates
 
-| Gate | When | Model |
-|------|------|-------|
-| Per-stop review | Every Claude turn | GPT-5.5 xhigh |
-| Ship gate | Pre-merge | Dual (Claude + GPT-5.5) |
-| TeammateIdle | Agent team idle | vitest + biome |
+Hook handlers are provided in `src/hooks/` — register them in `.claude/settings.json` to activate.
+
+| Gate | Hook Event | Model | Status |
+|------|-----------|-------|--------|
+| Per-stop review | Stop | GPT-5.5 xhigh | Requires registration |
+| Ship gate | Manual | Dual (Claude + GPT-5.5) | Fails closed on error |
+| TeammateIdle | TeammateIdle | vitest + biome | Requires registration |
 
 ## Architecture
 

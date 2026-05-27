@@ -6,7 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const SAFE_NAME_RE = /^[a-zA-Z0-9_-]{1,100}$/;
 
@@ -80,7 +80,9 @@ export function removeProject(name) {
 export function resolveProject(nameOrPath) {
   if (!nameOrPath) return null;
   const registry = loadRegistry();
-  if (registry[nameOrPath]) return registry[nameOrPath];
-  if (existsSync(nameOrPath)) return nameOrPath;
-  return null;
+  const resolved = registry[nameOrPath] ?? (existsSync(nameOrPath) ? nameOrPath : null);
+  if (!resolved) return null;
+  const canonical = resolve(resolved);
+  if (canonical.includes("..")) return null;
+  return canonical;
 }
