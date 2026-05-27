@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock all dependencies BEFORE importing orchestrate
 vi.mock("../src/lib/exec.mjs", () => ({
-  launchClaude: vi.fn(),
+  launchClaude: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/lib/persist.mjs", () => ({

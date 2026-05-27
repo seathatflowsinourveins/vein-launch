@@ -12,5 +12,6 @@
   "quality": {
     "codexReview": "every-stop",
     "shipGate": true
-  }
+  },
+  "unleashPhase": "bypass"
 }
