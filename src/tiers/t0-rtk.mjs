@@ -6,7 +6,7 @@ export const meta = { id: "t0-rtk", name: "RTK", modes: ["fast", "deep", "repair
 const RTK_VERSION_PIN = "0.42";
 const IS_WINDOWS = process.platform === "win32";
 
-export async function check(config, context) {
+export async function check(_config, _context) {
   const start = performance.now();
   const evidence = [];
 
@@ -92,7 +92,7 @@ export async function check(config, context) {
   });
 }
 
-export async function repair(config, context) {
+export async function repair(_config, _context) {
   const start = performance.now();
   const result = await exec("rtk init -g --auto-patch");
   const ok = result.ok;
