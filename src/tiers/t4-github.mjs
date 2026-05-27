@@ -1,25 +1,179 @@
 import { createResult, Severity } from "../lib/result.mjs";
+import { exec } from "../lib/shell.mjs";
 
 export const meta = { id: "t4-github", name: "GitHub", modes: ["deep", "repair"] };
 
-export async function check(config, context) {
+/** Required GitHub token scopes */
+const REQUIRED_SCOPES = ["repo", "workflow", "security_events"];
+
+/** Remediation text constants */
+const REMEDIATION_AUTH_LOGIN = "gh auth login";
+const REMEDIATION_AUTH_REFRESH = "gh auth refresh -s repo,workflow,security_events";
+const REMEDIATION_SIGNING =
+  "git config --global gpg.format ssh && git config --global user.signingkey ~/.ssh/id_ed25519.pub";
+
+/**
+ * Check GitHub auth scopes. Returns evidence array (may be empty on pass).
+ * @returns {{ passEvidence: object[], blockEvidence: object[] }}
+ */
+async function checkAuthScopes() {
+  const res = await exec("gh auth status");
+  const combined = `${res.stdout} ${res.stderr}`;
+
+  if (!res.ok && combined.includes("not logged")) {
+    return {
+      passEvidence: [],
+      blockEvidence: [
+        {
+          check: "gh-auth-login",
+          actual: "not authenticated",
+          expected: "logged in to github.com",
+          remediation: REMEDIATION_AUTH_LOGIN,
+        },
+      ],
+    };
+  }
+
+  const missing = REQUIRED_SCOPES.filter((s) => !combined.includes(s));
+  if (missing.length > 0) {
+    return {
+      passEvidence: [],
+      blockEvidence: [
+        {
+          check: "gh-auth-scopes",
+          actual: `missing scopes: ${missing.join(", ")}`,
+          expected: REQUIRED_SCOPES.join(", "),
+          remediation: REMEDIATION_AUTH_REFRESH,
+        },
+      ],
+    };
+  }
+
+  return {
+    passEvidence: [{ check: "gh-auth-scopes", actual: "all required scopes present" }],
+    blockEvidence: [],
+  };
+}
+
+/**
+ * Check SSH commit-signing configuration. Returns evidence array.
+ * @returns {{ passEvidence: object[], warnEvidence: object[] }}
+ */
+async function checkSshSigning() {
+  const [formatRes, keyRes] = await Promise.all([
+    exec("git config gpg.format"),
+    exec("git config user.signingkey"),
+  ]);
+
+  const warnEvidence = [];
+
+  if (!formatRes.ok || formatRes.stdout !== "ssh") {
+    warnEvidence.push({
+      check: "git-signing-format",
+      actual: formatRes.ok ? formatRes.stdout || "(empty)" : "not set",
+      expected: "ssh",
+      remediation: REMEDIATION_SIGNING,
+    });
+  }
+
+  if (!keyRes.ok || !keyRes.stdout) {
+    warnEvidence.push({
+      check: "git-signing-key",
+      actual: "not set",
+      expected: "path to SSH public key",
+      remediation: REMEDIATION_SIGNING,
+    });
+  }
+
+  if (warnEvidence.length === 0) {
+    return {
+      passEvidence: [{ check: "git-ssh-signing", actual: "configured" }],
+      warnEvidence: [],
+    };
+  }
+
+  return { passEvidence: [], warnEvidence };
+}
+
+/**
+ * @param {Object} _config
+ * @param {{ mode?: string }} _context
+ * @returns {Promise<import("../lib/result.mjs").TierResult>}
+ */
+export async function check(_config, _context) {
   const start = performance.now();
+
+  const [authResult, signingResult] = await Promise.all([checkAuthScopes(), checkSshSigning()]);
+
+  // BLOCK takes priority — return only BLOCK evidence
+  if (authResult.blockEvidence.length > 0) {
+    return createResult({
+      tierId: meta.id,
+      tierName: meta.name,
+      severity: Severity.BLOCK,
+      evidence: authResult.blockEvidence,
+      durationMs: performance.now() - start,
+    });
+  }
+
+  // WARN if SSH signing not configured
+  if (signingResult.warnEvidence.length > 0) {
+    return createResult({
+      tierId: meta.id,
+      tierName: meta.name,
+      severity: Severity.WARN,
+      evidence: signingResult.warnEvidence,
+      durationMs: performance.now() - start,
+    });
+  }
+
+  // All pass
   return createResult({
     tierId: meta.id,
     tierName: meta.name,
     severity: Severity.PASS,
-    evidence: [{ check: "github-auth", actual: "stub — not yet implemented" }],
+    evidence: [...authResult.passEvidence, ...signingResult.passEvidence],
     durationMs: performance.now() - start,
   });
 }
 
-export async function repair(config, context) {
+/**
+ * @param {Object} _config
+ * @param {Object} _context
+ * @returns {Promise<import("../lib/result.mjs").TierResult>}
+ */
+export async function repair(_config, _context) {
   const start = performance.now();
+
+  // Always refresh auth scopes
+  await exec("gh auth refresh -s repo,workflow,security_events");
+
+  // Check and fix SSH signing if needed
+  const [formatRes, keyRes] = await Promise.all([
+    exec("git config gpg.format"),
+    exec("git config user.signingkey"),
+  ]);
+
+  const repairEvidence = [{ check: "gh-auth-refresh", actual: "ran gh auth refresh" }];
+
+  if (!formatRes.ok || formatRes.stdout !== "ssh") {
+    await exec("git config --global gpg.format ssh");
+    repairEvidence.push({ check: "git-signing-format-set", actual: "gpg.format set to ssh" });
+  }
+
+  if (!keyRes.ok || !keyRes.stdout) {
+    await exec("git config --global user.signingkey ~/.ssh/id_ed25519.pub");
+    repairEvidence.push({
+      check: "git-signing-key-set",
+      actual: "user.signingkey set to ~/.ssh/id_ed25519.pub",
+    });
+  }
+
   return createResult({
     tierId: meta.id,
     tierName: meta.name,
     severity: Severity.PASS,
-    evidence: [{ check: "github-repair", actual: "stub — not yet implemented" }],
+    evidence: repairEvidence,
     durationMs: performance.now() - start,
   });
 }
