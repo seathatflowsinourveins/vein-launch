@@ -43,7 +43,26 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ScriptRoot = $PSScriptRoot
-$RepoRoot = Split-Path $ScriptRoot -Parent
+
+# Resolve vein-launch repo root deterministically:
+#   1. $env:VEIN_LAUNCH_ROOT (preferred — set by `vein --setup`)
+#   2. $PSScriptRoot/.. — works when this script lives in <repo>/bin/
+#   3. Error out (do NOT silently target the wrong directory)
+$RepoRoot = $env:VEIN_LAUNCH_ROOT
+if (-not $RepoRoot -or -not (Test-Path (Join-Path $RepoRoot 'src/cli.mjs'))) {
+  $candidate = Split-Path $ScriptRoot -Parent
+  if (Test-Path (Join-Path $candidate 'src/cli.mjs')) {
+    $RepoRoot = $candidate
+  } else {
+    Write-Error @"
+vein: cannot locate vein-launch repo root.
+  Set `$env:VEIN_LAUNCH_ROOT` (User scope) to the repo path, e.g.:
+    [Environment]::SetEnvironmentVariable('VEIN_LAUNCH_ROOT', 'C:\SEA\src\vein-launch', 'User')
+  Then open a new shell.
+"@
+    exit 1
+  }
+}
 
 if ($Version) {
   $pkg = Get-Content (Join-Path $RepoRoot 'package.json') | ConvertFrom-Json
