@@ -17,3 +17,5 @@ Thumbs.db
 ruvector.db
 *.db
 CLAUDE.local.md
+agent-orchestrator.yaml
+.ao/

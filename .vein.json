@@ -1,0 +1,12 @@
+{
+  "project": "vein-launch",
+  "mode": { "default": "fast" },
+  "modelRouting": {
+    "default": "opus",
+    "subagents": "claude-haiku-4-5"
+  },
+  "quality": {
+    "codexReview": "every-stop",
+    "shipGate": true
+  }
+}
