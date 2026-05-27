@@ -3,8 +3,8 @@ import { exec } from "../lib/shell.mjs";
 
 export const meta = { id: "t4-github", name: "GitHub", modes: ["deep", "repair"] };
 
-/** Required GitHub token scopes */
-const REQUIRED_SCOPES = ["repo", "workflow", "security_events"];
+const CRITICAL_SCOPES = ["repo", "workflow"];
+const OPTIONAL_SCOPES = ["security_events"];
 
 /** Remediation text constants */
 const REMEDIATION_AUTH_LOGIN = "gh auth login";
@@ -39,27 +39,44 @@ async function checkAuthScopes() {
     (scopeLine ?? "")
       .replace(/^.*token scopes?:/i, "")
       .split(",")
-      .map((s) => s.trim())
+      .map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
       .filter(Boolean),
   );
-  const missing = REQUIRED_SCOPES.filter((s) => !scopes.has(s));
-  if (missing.length > 0) {
+  const missingCritical = CRITICAL_SCOPES.filter((s) => !scopes.has(s));
+  const missingOptional = OPTIONAL_SCOPES.filter((s) => !scopes.has(s));
+
+  if (missingCritical.length > 0) {
     return {
       passEvidence: [],
       blockEvidence: [
         {
           check: "gh-auth-scopes",
-          actual: `missing scopes: ${missing.join(", ")}`,
-          expected: REQUIRED_SCOPES.join(", "),
+          actual: `missing critical scopes: ${missingCritical.join(", ")}`,
+          expected: CRITICAL_SCOPES.join(", "),
           remediation: REMEDIATION_AUTH_REFRESH,
         },
       ],
+      warnEvidence: [],
     };
   }
 
+  const warnEvidence =
+    missingOptional.length > 0
+      ? [
+          {
+            check: "gh-auth-scopes-optional",
+            actual: `missing optional scopes: ${missingOptional.join(", ")}`,
+            remediation: "Create a fine-grained PAT with security_events for code scanning alerts",
+          },
+        ]
+      : [];
+
   return {
-    passEvidence: [{ check: "gh-auth-scopes", actual: "all required scopes present" }],
+    passEvidence: [
+      { check: "gh-auth-scopes", actual: `critical scopes present: ${CRITICAL_SCOPES.join(", ")}` },
+    ],
     blockEvidence: [],
+    warnEvidence,
   };
 }
 
@@ -124,13 +141,14 @@ export async function check(_config, _context) {
     });
   }
 
-  // WARN if SSH signing not configured
-  if (signingResult.warnEvidence.length > 0) {
+  // Combine all WARN evidence (optional scopes + signing)
+  const allWarn = [...(authResult.warnEvidence || []), ...signingResult.warnEvidence];
+  if (allWarn.length > 0) {
     return createResult({
       tierId: meta.id,
       tierName: meta.name,
       severity: Severity.WARN,
-      evidence: signingResult.warnEvidence,
+      evidence: allWarn,
       durationMs: performance.now() - start,
     });
   }
