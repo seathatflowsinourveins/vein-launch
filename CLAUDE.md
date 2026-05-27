@@ -40,6 +40,15 @@ export async function repair(config, context) { /* returns TierResult */ }
 Per-project config at repo root. Validated against `config/schema.json`.
 No `.vein.json` → defaults (fast mode, PM2, Opus, GPT-5.5 on PR only).
 
+## Eval History (Wave 10.5-B)
+
+The eval-gate history log lives **outside the repo** at `~/.vein/eval-history/<project>.jsonl`,
+where `<project>` is the lowercased, alphanumeric-plus-hyphens basename of the working
+directory (e.g. `vein-launch`). This path is intentional: keeping the file in-repo caused
+a permanent "modified" git status because the commit-msg hook appends to it on every commit,
+and a tracked file is trivially tampered with (delete → free first-run pass). The parent
+directory is created automatically on first use. `docs/eval-history.jsonl` is gitignored.
+
 ## Quality Chain
 
 Prechecks → Launch → [Per-turn: RTK + context-mode] → [Per-stop: GPT-5.5 xhigh]
