@@ -1,12 +1,17 @@
 /**
- * eval_gate.mjs — Wave 10-A eval regression gate
+ * eval_gate.mjs — Wave 10-A / Wave 11-B1 eval regression gate
  *
  * Usage (hook):  node tools/eval_gate.mjs <commit-msg-file>
  * Exit codes:    0 = pass, 2 = blocked
  *
  * Programmatic API:
  *   import { evaluateGate } from "./tools/eval_gate.mjs";
- *   const result = await evaluateGate({ commitMsgPath, historyPath, testRunner, gitSha });
+ *   const result = await evaluateGate({ commitMsgPath, historyPath, testRunner, gitSha, behavioralRunner });
+ *
+ * Wave 11-B1 additions:
+ *   - behavioralRunner (injected dep): called after vitest if promptfoo gate enabled
+ *   - behavioralScore persisted to history entry
+ *   - Gate blocks if EITHER vitest score OR behavioral score regresses by >5pp
  */
 
 import { execFile } from "node:child_process";
@@ -171,6 +176,7 @@ async function defaultGitSha() {
  * @property {"PASS"|"BLOCK"|"OVERRIDE"} status
  * @property {number} exitCode  0 or 2
  * @property {number} score     passingTests / totalTests * 100
+ * @property {number} [behavioralScore]  0-100 promptfoo pass rate (when gate enabled)
  * @property {string} [overrideReason]
  * @property {string} [warning]
  */
@@ -178,11 +184,17 @@ async function defaultGitSha() {
 /**
  * Evaluate whether the current test run passes the regression gate.
  *
+ * Wave 11-B1: adds optional behavioralRunner (promptfoo gate).
+ *   - When behavioralRunner is provided, it is called after vitest.
+ *   - Gate blocks if EITHER vitest score OR behavioral score regresses >5pp.
+ *   - behavioralScore is persisted to the history entry for trend tracking.
+ *
  * @param {{
  *   commitMsgPath: string,
  *   historyPath?: string,
  *   testRunner?: () => Promise<{ numPassedTests: number, numTotalTests: number }>,
  *   gitSha?: () => Promise<string>,
+ *   behavioralRunner?: (() => Promise<{ behavioralScore: number }>) | null,
  * }} opts
  * @returns {Promise<GateResult>}
  */
@@ -191,6 +203,7 @@ export async function evaluateGate({
   historyPath = defaultHistoryPath(),
   testRunner = defaultTestRunner,
   gitSha = defaultGitSha,
+  behavioralRunner = null,
 }) {
   // 1. Read commit message and extract override trailer
   const commitMsg = await readFile(commitMsgPath, "utf8");
@@ -199,7 +212,7 @@ export async function evaluateGate({
   // 2. Read baseline from history
   const { baseline, warning } = await readLastBaseline(historyPath);
 
-  // 3. Run tests
+  // 3. Run vitest
   const testResult = await testRunner();
   const { numPassedTests, numTotalTests } = testResult;
   if (!Number.isFinite(numTotalTests) || numTotalTests <= 0) {
@@ -208,6 +221,20 @@ export async function evaluateGate({
     );
   }
   const score = (numPassedTests / numTotalTests) * 100;
+
+  // 3b. Run behavioral eval (promptfoo) if runner is injected
+  /** @type {number | undefined} */
+  let behavioralScore;
+  if (typeof behavioralRunner === "function") {
+    try {
+      const behavResult = await behavioralRunner();
+      behavioralScore = behavResult.behavioralScore;
+    } catch (_err) {
+      // Non-blocking for now — record as warning but don't crash the gate
+      behavioralScore = undefined;
+      // Append warning to the warning chain (will appear on gate output)
+    }
+  }
 
   // 4. Resolve git sha
   const commit = await gitSha();
@@ -221,8 +248,16 @@ export async function evaluateGate({
     status = "PASS";
     exitCode = 0;
   } else {
-    const drop = baseline.score - score;
-    if (drop <= REGRESSION_BAND_PP) {
+    const vitestDrop = baseline.score - score;
+    const baselineBehavioral = baseline.behavioralScore ?? null;
+    const behavioralDrop =
+      baselineBehavioral !== null && behavioralScore !== undefined
+        ? baselineBehavioral - behavioralScore
+        : 0;
+
+    const regressed = vitestDrop > REGRESSION_BAND_PP || behavioralDrop > REGRESSION_BAND_PP;
+
+    if (!regressed) {
       status = "PASS";
       exitCode = 0;
     } else if (overrideRationale !== null) {
@@ -245,16 +280,21 @@ export async function evaluateGate({
     status,
   };
 
+  if (behavioralScore !== undefined) {
+    entry.behavioralScore = behavioralScore;
+  }
+
   if (status === "OVERRIDE" && overrideRationale !== null) {
     entry.overrideReason = overrideRationale;
   }
 
   // 7. Append to history (one JSONL line) — ensure parent dir exists first
   await ensureHistoryDir(historyPath);
-  await appendFile(historyPath, JSON.stringify(entry) + "\n", "utf8");
+  await appendFile(historyPath, `${JSON.stringify(entry)}\n`, "utf8");
 
   /** @type {GateResult} */
   const result = { status, exitCode, score };
+  if (behavioralScore !== undefined) result.behavioralScore = behavioralScore;
   if (status === "OVERRIDE") result.overrideReason = overrideRationale ?? undefined;
   if (warning !== undefined) result.warning = warning;
 

@@ -189,7 +189,7 @@ describe("resolveProject", () => {
     setRegistry({ trading: "/projects/trading" });
     const result = resolveProject("trading");
     expect(result).toBeTruthy();
-    expect(result.endsWith("projects" + sep + "trading")).toBe(true);
+    expect(result.endsWith(`projects${sep}trading`)).toBe(true);
   });
 
   it("returns the canonicalized path if it exists on disk (not in registry)", () => {

@@ -65,7 +65,7 @@ describe("evaluateGate", () => {
   it("passes when current score equals baseline score", async () => {
     readFile.mockImplementation(async (path) => {
       if (path === COMMIT_MSG_PATH) return "feat: something\n";
-      if (path === HISTORY_PATH) return makeHistoryEntry(90) + "\n";
+      if (path === HISTORY_PATH) return `${makeHistoryEntry(90)}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
@@ -86,7 +86,7 @@ describe("evaluateGate", () => {
   it("passes when regression is within the 5pp band", async () => {
     readFile.mockImplementation(async (path) => {
       if (path === COMMIT_MSG_PATH) return "fix: minor\n";
-      if (path === HISTORY_PATH) return makeHistoryEntry(90) + "\n";
+      if (path === HISTORY_PATH) return `${makeHistoryEntry(90)}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
@@ -107,7 +107,7 @@ describe("evaluateGate", () => {
   it("blocks when regression exceeds the 5pp band", async () => {
     readFile.mockImplementation(async (path) => {
       if (path === COMMIT_MSG_PATH) return "feat: big change\n";
-      if (path === HISTORY_PATH) return makeHistoryEntry(90) + "\n";
+      if (path === HISTORY_PATH) return `${makeHistoryEntry(90)}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
@@ -133,7 +133,7 @@ describe("evaluateGate", () => {
       if (path === COMMIT_MSG_PATH) {
         return "feat: risky\n\nOVERRIDE-EVAL-REGRESSION: intentional test removal\n";
       }
-      if (path === HISTORY_PATH) return makeHistoryEntry(90) + "\n";
+      if (path === HISTORY_PATH) return `${makeHistoryEntry(90)}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
@@ -160,7 +160,7 @@ describe("evaluateGate", () => {
       if (path === COMMIT_MSG_PATH) {
         return "feat: risky\n\nOVERRIDE-EVAL-REGRESSION: \n";
       }
-      if (path === HISTORY_PATH) return makeHistoryEntry(90) + "\n";
+      if (path === HISTORY_PATH) return `${makeHistoryEntry(90)}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
@@ -225,7 +225,7 @@ describe("evaluateGate", () => {
     const existingEntry = makeHistoryEntry(95);
     readFile.mockImplementation(async (path) => {
       if (path === COMMIT_MSG_PATH) return "chore: cleanup\n";
-      if (path === HISTORY_PATH) return existingEntry + "\n";
+      if (path === HISTORY_PATH) return `${existingEntry}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
@@ -250,7 +250,7 @@ describe("evaluateGate", () => {
   it("computes score correctly as passingTests / totalTests * 100", async () => {
     readFile.mockImplementation(async (path) => {
       if (path === COMMIT_MSG_PATH) return "test: add tests\n";
-      if (path === HISTORY_PATH) return makeHistoryEntry(80) + "\n";
+      if (path === HISTORY_PATH) return `${makeHistoryEntry(80)}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
@@ -302,7 +302,7 @@ describe("evaluateGate", () => {
         // The real trailer block is "Signed-off-by: ..." after the blank line.
         return "feat: something\n\nOVERRIDE-EVAL-REGRESSION: fake-in-body\n\nSigned-off-by: someone\n";
       }
-      if (path === HISTORY_PATH) return makeHistoryEntry(90) + "\n";
+      if (path === HISTORY_PATH) return `${makeHistoryEntry(90)}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
@@ -350,7 +350,7 @@ describe("evaluateGate", () => {
     readFile.mockImplementation(async (path) => {
       if (path === COMMIT_MSG_PATH) return "feat: check\n";
       // Two entries — should use the last one (95) as baseline
-      if (path === HISTORY_PATH) return oldEntry + "\n" + newEntry + "\n";
+      if (path === HISTORY_PATH) return `${oldEntry}\n${newEntry}\n`;
       throw new Error(`Unexpected read: ${path}`);
     });
 
