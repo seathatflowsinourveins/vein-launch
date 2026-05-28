@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "gates": {
+    "lint": { "command": "npx biome check .", "blocking": true },
+    "test": { "command": "npx vitest run", "blocking": true },
+    "coverage": { "command": "npx vitest run --coverage", "blocking": true },
+    "eval": { "command": "npx vitest run evals/deepeval/", "blocking": true },
+    "codex-review": { "command": "codex review --model gpt-5.5 --effort xhigh", "blocking": false }
+  }
+}

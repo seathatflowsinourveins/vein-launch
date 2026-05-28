@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# DEPRECATED — migrating to DeepEval. Remove after Wave 13.
 description: "vein-launch behavioral precheck evaluation (Wave 11-B1)"
 
 providers:

@@ -1,5 +1,6 @@
 /**
  * tier-report.js — promptfoo JavaScript assertion for vein-launch eval scenarios.
+ * DEPRECATED — migrating to DeepEval. Remove after Wave 13.
  *
  * Loaded via:  assert: [{ type: javascript, value: "file://evals/assertions/tier-report.js" }]
  *
