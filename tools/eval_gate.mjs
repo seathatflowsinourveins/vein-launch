@@ -331,8 +331,15 @@ if (isMain || process.argv[1]?.endsWith("eval_gate.mjs")) {
       const { runBehavioralEval } = await import("./behavioral_eval.mjs");
       behavioralRunner = runBehavioralEval;
     }
-  } catch {
-    // Missing or unreadable .vein.json — leave behavioralRunner unset.
+  } catch (err) {
+    // A genuinely absent .vein.json means the project hasn't opted into the
+    // behavioral gate — skip silently. Any OTHER error (malformed JSON,
+    // unreadable file, runner import failure) must NOT silently disable the
+    // gate: fail closed so a broken opt-in cannot slip past quality checks.
+    if (err?.code !== "ENOENT") {
+      process.stderr.write(`[eval-gate] FATAL: behavioral gate init failed: ${err.message}\n`);
+      process.exit(1);
+    }
   }
 
   try {
