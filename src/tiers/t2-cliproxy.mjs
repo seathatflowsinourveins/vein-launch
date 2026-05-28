@@ -154,6 +154,27 @@ export async function check(config, context) {
   const evidence = [processResult.evidence];
 
   if (!processResult.ok) {
+    // checkProcess reflects the manager's bookkeeping (pm2/docker), not whether
+    // the proxy is actually answering. The proxy can be live while the manager is
+    // unaware — started directly, or pm2's daemon is unreachable (EPERM on its
+    // control pipe). Confirm with /healthz before reporting it down, so we don't
+    // tell the user to (re)start a proxy that is already serving.
+    const liveness = await checkHttp(port);
+    if (liveness.ok) {
+      return createResult({
+        tierId: meta.id,
+        tierName: meta.name,
+        severity: Severity.WARN,
+        evidence: [
+          {
+            check: "cliproxy-liveness",
+            actual: `Proxy is answering on :${port} but ${config.cliproxy.hosting} is not tracking it`,
+            remediation: `Proxy is usable as-is; re-attach it to ${config.cliproxy.hosting} when convenient`,
+          },
+        ],
+        durationMs: performance.now() - start,
+      });
+    }
     return createResult({
       tierId: meta.id,
       tierName: meta.name,

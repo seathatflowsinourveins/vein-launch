@@ -68,7 +68,7 @@ describe("t2-cliproxy", () => {
       expect(exec).toHaveBeenCalledWith("pm2 describe cliproxy");
     });
 
-    it("WARNs when PM2 process is not running", async () => {
+    it("WARNs when PM2 process is not running and /healthz is unreachable", async () => {
       exec.mockResolvedValueOnce({
         ok: false,
         stdout: "status      | stopped",
@@ -76,11 +76,39 @@ describe("t2-cliproxy", () => {
         exitCode: 1,
         timedOut: false,
       });
+      fetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
       const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "fast" });
 
       expect(result.severity).toBe(Severity.WARN);
       expect(result.evidence[0].remediation).toBeTruthy();
+      expect(result.evidence.some((e) => e.check === "cliproxy-liveness")).toBe(false);
+    });
+
+    it("reports the proxy live (not a flat down) when PM2 is unaware but /healthz responds", async () => {
+      // pm2 has no record of the proxy (direct-launched, or pm2 daemon EPERM on its pipe)
+      exec.mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: "connect EPERM rpc.sock unreachable",
+        exitCode: 1,
+        timedOut: false,
+      });
+      // ...but the proxy itself is answering on :8317
+      fetch.mockResolvedValueOnce({ ok: true, json: vi.fn().mockResolvedValue({ status: "ok" }) });
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "fast" });
+
+      expect(result.severity).toBe(Severity.WARN);
+      expect(fetch).toHaveBeenCalledWith(
+        "http://localhost:8317/healthz",
+        expect.objectContaining({ signal: expect.any(Object) }),
+      );
+      const liveness = result.evidence.find((e) => e.check === "cliproxy-liveness");
+      expect(liveness).toBeTruthy();
+      expect(liveness.actual).toContain("answering on :8317");
+      // must NOT tell the user to start a proxy that is already serving
+      expect(result.evidence.some((e) => /pm2 start/i.test(e.remediation ?? ""))).toBe(false);
     });
   });
 
@@ -102,7 +130,7 @@ describe("t2-cliproxy", () => {
       );
     });
 
-    it("WARNs when Docker container is stopped", async () => {
+    it("WARNs when Docker container is stopped and /healthz is unreachable", async () => {
       exec.mockResolvedValueOnce({
         ok: false,
         stdout: '{"State":"exited","Name":"cliproxy"}',
@@ -110,6 +138,7 @@ describe("t2-cliproxy", () => {
         exitCode: 1,
         timedOut: false,
       });
+      fetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
       const result = await check({ cliproxy: { hosting: "docker", port: 8317 } }, { mode: "fast" });
 
