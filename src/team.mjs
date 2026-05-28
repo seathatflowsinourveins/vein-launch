@@ -10,8 +10,8 @@ import { join } from "node:path";
 
 /**
  * @typedef {{ model: string, instructions: string }} LeadConfig
- * @typedef {{ name: string, model: string, instructions: string }} TeammateConfig
- * @typedef {{ name: string, lead: LeadConfig, teammates: TeammateConfig[], taskDir: string, createdAt: string }} TeamConfig
+ * @typedef {{ name: string, model: string, instructions: string, isolation?: string }} TeammateConfig
+ * @typedef {{ name: string, lead: LeadConfig, teammates: TeammateConfig[], taskDir: string, createdAt: string, isolation?: string }} TeamConfig
  */
 
 const DEFAULT_LEAD = { model: "opus", instructions: "Coordinate the team" };
@@ -38,13 +38,19 @@ export function generateTeamConfig(config) {
   const teamDir = join(homedir(), ".claude", "teams", agents.teamName);
   const taskDir = join(teamDir, "tasks");
 
-  return {
+  const teamConfig = {
     name: agents.teamName,
     lead: agents.lead ?? DEFAULT_LEAD,
     teammates: agents.teammates ?? [],
     taskDir,
     createdAt: new Date().toISOString(),
   };
+
+  if (agents.isolation) {
+    teamConfig.isolation = agents.isolation;
+  }
+
+  return teamConfig;
 }
 
 /**

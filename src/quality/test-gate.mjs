@@ -7,8 +7,8 @@ import { exec } from "../lib/shell.mjs";
 /**
  * @typedef {Object} TestGateResult
  * @property {boolean} passed
- * @property {{ ok: boolean, output: string }} tests
- * @property {{ ok: boolean, output: string }} lint
+ * @property {{ ok: boolean, output: string, stderr: string }} tests
+ * @property {{ ok: boolean, output: string, stderr: string }} lint
  * @property {number} exitCode
  */
 
@@ -29,8 +29,12 @@ export async function runTestGate(options = {}) {
   const passed = testsResult.ok && lintResult.ok;
   return {
     passed,
-    tests: { ok: testsResult.ok, output: testsResult.stdout.slice(-500) },
-    lint: { ok: lintResult.ok, output: lintResult.stdout.slice(-500) },
+    tests: {
+      ok: testsResult.ok,
+      output: testsResult.stdout.slice(-500),
+      stderr: testsResult.stderr,
+    },
+    lint: { ok: lintResult.ok, output: lintResult.stdout.slice(-500), stderr: lintResult.stderr },
     exitCode: passed ? 0 : 2,
   };
 }
