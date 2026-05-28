@@ -15,12 +15,13 @@
  *   1 — some scenarios failed or infrastructure error
  */
 
-import { execFile } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 
 /** Absolute path to the repo root (two levels up from tools/) */
 const REPO_ROOT = join(fileURLToPath(import.meta.url), "..", "..");
@@ -108,8 +109,7 @@ async function runDeepEvalEval({ runner = defaultVitestRunner } = {}) {
 async function defaultVitestRunner() {
   let stdout;
   try {
-    const result = await execFileAsync("npx", ["vitest", "run", DEEPEVAL_DIR, "--reporter=json"], {
-      shell: true,
+    const result = await execAsync(`npx vitest run "${DEEPEVAL_DIR}" --reporter=json`, {
       cwd: REPO_ROOT,
     });
     stdout = result.stdout;
@@ -181,10 +181,9 @@ async function runPromptfooEval({
 async function defaultPromptfooRunner(configPath) {
   let stdout;
   try {
-    const result = await execFileAsync(
-      "npx",
-      ["promptfoo", "eval", "-c", configPath, "--no-progress-bar", "--output", "json"],
-      { shell: true, cwd: REPO_ROOT },
+    const result = await execAsync(
+      `npx promptfoo eval -c "${configPath}" --no-progress-bar --output json`,
+      { cwd: REPO_ROOT },
     );
     stdout = result.stdout;
   } catch (err) {
