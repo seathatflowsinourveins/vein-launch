@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
+  readdir: vi.fn(),
   access: vi.fn(),
   stat: vi.fn(),
 }));
@@ -65,6 +66,14 @@ function mockAllPass({ repoRoot = "/repo" } = {}) {
     if (ps.includes("package.json")) {
       return Promise.resolve(JSON.stringify({ version: "1.2.0" }));
     }
+    if (ps.includes("runs")) {
+      return Promise.resolve(
+        JSON.stringify({
+          timestamp: "2026-05-27T00:00:00.000Z",
+          results: Array.from({ length: 7 }, () => ({ severity: "pass" })),
+        }),
+      );
+    }
     return Promise.reject({ code: "ENOENT" });
   });
 
@@ -73,6 +82,12 @@ function mockAllPass({ repoRoot = "/repo" } = {}) {
 
   // stat for deep-mode run directory
   fsp.stat.mockResolvedValue({ isDirectory: () => true });
+
+  // deep-mode-run now lists the runs dir + reads the latest file in-process
+  fsp.readdir.mockResolvedValue(["2026-05-27T00-00-00-000Z_proj_deep_abcd1234.json"]);
+
+  // healthz probe is now an in-process fetch (was a node -e subprocess)
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 200 }));
 
   // env
   process.env.VEIN_LAUNCH_ROOT = repoRoot;

@@ -48,6 +48,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $ScriptRoot = $PSScriptRoot
 
+# Deterministic native-command argument quoting. PS 7.3+ defaults to 'Standard'
+# (correctly escapes args with embedded quotes/backslashes when splatting to
+# `node` below); 7.0-7.2 use legacy Windows quoting that can mis-pass such args.
+# Set it explicitly so forwarding doesn't depend on the host's PowerShell
+# version. Assigning a preference variable is harmless on versions predating it.
+$PSNativeCommandArgumentPassing = 'Standard'
+
 # PowerShell binds positional parameters BEFORE ValueFromRemainingArguments.
 # So `vein --version` puts `--version` into $Project (positional 0), not
 # $PassThrough. Rescue any dash-prefixed value out of $Project so the
@@ -83,9 +90,9 @@ if ($PassThrough) {
 #   2. $PSScriptRoot/.. — works when this script lives in <repo>/bin/
 #   3. Error out (do NOT silently target the wrong directory)
 $RepoRoot = $env:VEIN_LAUNCH_ROOT
-if (-not $RepoRoot -or -not (Test-Path (Join-Path $RepoRoot 'src/cli.mjs'))) {
+if (-not $RepoRoot -or -not (Test-Path -LiteralPath (Join-Path $RepoRoot 'src/cli.mjs'))) {
   $candidate = Split-Path $ScriptRoot -Parent
-  if (Test-Path (Join-Path $candidate 'src/cli.mjs')) {
+  if (Test-Path -LiteralPath (Join-Path $candidate 'src/cli.mjs')) {
     $RepoRoot = $candidate
   } else {
     Write-Error @"
@@ -99,7 +106,7 @@ vein: cannot locate vein-launch repo root.
 }
 
 if ($Version) {
-  $pkg = Get-Content (Join-Path $RepoRoot 'package.json') | ConvertFrom-Json
+  $pkg = Get-Content -LiteralPath (Join-Path $RepoRoot 'package.json') | ConvertFrom-Json
   Write-Host "vein-launch v$($pkg.version)"
   exit 0
 }

@@ -19,7 +19,7 @@
  * @module setup/doctor
  */
 
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { exec } from "../lib/shell.mjs";
@@ -165,13 +165,15 @@ async function checkDeepModeRun(veinDir) {
     };
   }
 
-  // List JSON files in runs dir using exec (avoids reading raw directory into context)
-  const result = await exec(
-    `node -e "const fs=require('fs');const d='${runsDir}';try{const f=fs.readdirSync(d).filter(x=>x.endsWith('.json'));if(!f.length){process.stdout.write('NONE')}else{const data=JSON.parse(fs.readFileSync(d+'/'+f.sort().reverse()[0],'utf8'));const r=data.results||[];const ok=r.length>=7&&!r.some(x=>x.severity==='error'||x.severity==='block');const ts=data.timestamp||'unknown';process.stdout.write(ok?'OK:'+ts:'PARTIAL:'+r.length)}}catch(e){process.stdout.write('ERR:'+e.message)}"`,
-    { shellMode: true, timeout: 10_000 },
-  );
-
-  if (!result.ok || result.stdout === "NONE" || result.stdout.startsWith("ERR")) {
+  // Inspect the latest run in-process — no subprocess, so runsDir never gets
+  // interpolated into a shell command string (it can contain spaces / cmd metachars).
+  let files;
+  try {
+    files = (await readdir(runsDir)).filter((x) => x.endsWith(".json"));
+  } catch {
+    files = [];
+  }
+  if (files.length === 0) {
     return {
       name: "deep-mode-run",
       status: "warn",
@@ -179,16 +181,34 @@ async function checkDeepModeRun(veinDir) {
     };
   }
 
-  if (result.stdout.startsWith("PARTIAL")) {
+  let data;
+  try {
+    const latest = files.sort().reverse()[0];
+    data = JSON.parse(await readFile(join(runsDir, latest), "utf8"));
+  } catch {
     return {
       name: "deep-mode-run",
       status: "warn",
-      message: `last run had fewer than 7 tiers: ${result.stdout}`,
+      message: "no qualifying deep-mode run found — run `vein --deep <project>` once",
     };
   }
 
-  const ts = result.stdout.replace(/^OK:/, "");
-  return { name: "deep-mode-run", status: "pass", message: `last qualifying run: ${ts}` };
+  const results = Array.isArray(data.results) ? data.results : [];
+  const qualifies =
+    results.length >= 7 && !results.some((x) => x.severity === "error" || x.severity === "block");
+  if (!qualifies) {
+    return {
+      name: "deep-mode-run",
+      status: "warn",
+      message: `last run had fewer than 7 qualifying tiers: PARTIAL:${results.length}`,
+    };
+  }
+
+  return {
+    name: "deep-mode-run",
+    status: "pass",
+    message: `last qualifying run: ${data.timestamp ?? "unknown"}`,
+  };
 }
 
 /**
@@ -214,22 +234,29 @@ async function checkCliproxy() {
     };
   }
 
-  // Probe /healthz
+  // Probe /healthz in-process — no subprocess, so the port never gets
+  // interpolated into a shell command string.
   const port = process.env.CLIPROXY_PORT ?? "8317";
-  const healthResult = await exec(
-    `node -e "const http=require('http');const req=http.get('http://localhost:${port}/healthz',r=>{process.stdout.write(String(r.statusCode));r.destroy()});req.on('error',e=>process.stderr.write(e.message))"`,
-    { shellMode: true, timeout: 5_000 },
-  );
+  let statusCode = null;
+  let probeError = "";
+  try {
+    const res = await fetch(`http://localhost:${port}/healthz`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    statusCode = res.status;
+  } catch (err) {
+    probeError = err.message;
+  }
 
-  if (!healthResult.ok || healthResult.stdout !== "200") {
+  if (statusCode !== 200) {
     return {
       name: "cliproxy",
       status: "warn",
-      message: `PM2 online but /healthz returned ${healthResult.stdout || healthResult.stderr}`,
+      message: `PM2 online but /healthz returned ${statusCode ?? probeError}`,
     };
   }
 
-  return { name: "cliproxy", status: "pass", message: `PM2 online, /healthz 200` };
+  return { name: "cliproxy", status: "pass", message: "PM2 online, /healthz 200" };
 }
 
 /**
