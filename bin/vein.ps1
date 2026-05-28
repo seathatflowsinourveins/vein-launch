@@ -31,6 +31,10 @@ param(
 
   [switch]$Manifest,
 
+  [switch]$Doctor,
+
+  [switch]$FirstTime,
+
   [switch]$Ci,
 
   [switch]$Version,
@@ -60,16 +64,18 @@ if ($Project -and $Project.StartsWith('-')) {
 if ($PassThrough) {
   if ($PassThrough -contains '--version' -or $PassThrough -contains '-v') { $Version = $true }
   if ($PassThrough -contains '--help' -or $PassThrough -contains '-h')    { $Help    = $true }
-  if ($PassThrough -contains '--setup')    { $Setup    = $true }
-  if ($PassThrough -contains '--status')   { $Status   = $true }
-  if ($PassThrough -contains '--projects') { $Projects = $true }
-  if ($PassThrough -contains '--accounts') { $Accounts = $true }
-  if ($PassThrough -contains '--manifest') { $Manifest = $true }
-  if ($PassThrough -contains '--deep')     { $Deep     = $true }
-  if ($PassThrough -contains '--repair')   { $Repair   = $true }
-  if ($PassThrough -contains '--ci')       { $Ci       = $true }
+  if ($PassThrough -contains '--setup')      { $Setup     = $true }
+  if ($PassThrough -contains '--status')     { $Status    = $true }
+  if ($PassThrough -contains '--projects')   { $Projects  = $true }
+  if ($PassThrough -contains '--accounts')   { $Accounts  = $true }
+  if ($PassThrough -contains '--manifest')   { $Manifest  = $true }
+  if ($PassThrough -contains '--doctor')     { $Doctor    = $true }
+  if ($PassThrough -contains '--first-time') { $FirstTime = $true }
+  if ($PassThrough -contains '--deep')       { $Deep      = $true }
+  if ($PassThrough -contains '--repair')     { $Repair    = $true }
+  if ($PassThrough -contains '--ci')         { $Ci        = $true }
   # Strip the consumed long-flags so they're not double-forwarded to node.
-  $PassThrough = $PassThrough | Where-Object { $_ -notmatch '^--?(version|v|help|h|setup|status|projects|accounts|manifest|deep|repair|ci)$' }
+  $PassThrough = $PassThrough | Where-Object { $_ -notmatch '^--?(version|v|help|h|setup|status|projects|accounts|manifest|doctor|first-time|deep|repair|ci)$' }
 }
 
 # Resolve vein-launch repo root deterministically:
@@ -112,7 +118,9 @@ elseif ($Deep) { $mode = 'deep' }
 $orchestrator = Join-Path $RepoRoot 'src' 'cli.mjs'
 $nodeArgs = @($orchestrator)
 
-if ($Setup) { $nodeArgs += '--setup' }
+if ($Doctor) { $nodeArgs += '--doctor' }
+elseif ($Setup -and $FirstTime) { $nodeArgs += '--setup'; $nodeArgs += '--first-time' }
+elseif ($Setup) { $nodeArgs += '--setup' }
 elseif ($Status) { $nodeArgs += '--status' }
 elseif ($Projects) { $nodeArgs += '--projects' }
 elseif ($Accounts) { $nodeArgs += '--accounts' }
