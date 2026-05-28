@@ -1,6 +1,6 @@
 {
   "name": "vein-launch",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "SOTA Claude Code launcher with 7-tier precheck, CLIProxy management, and quality gates",
   "type": "module",
   "bin": {
