@@ -61,3 +61,19 @@ Prechecks → Launch → [Per-turn: RTK + context-mode] → [Per-stop: GPT-5.5 x
 - Vitest for tests (80% coverage threshold)
 - No default exports — named exports only
 - Errors: throw with context, never swallow silently
+
+## Git Bash / MSYS — Two-Shell Model
+
+Two distinct bash environments live on this Windows host:
+
+1. **Claude Code's Bash-tool subprocess** — harness injects `MSYS_NO_PATHCONV=1` + `MSYS2_ARG_CONV_EXCL=*` (path conversion OFF, broadly).
+2. **Operator's interactive mintty/wezterm shell** — no harness injection (path conversion ON).
+
+Symptoms reproducible in shell 1 may not reproduce in shell 2 and vice-versa. **Always state which shell a defect was observed in.**
+
+In Claude Code Bash tool calls (shell 1):
+- Use `cmd /c '<command>'` (single slash). NEVER `cmd //c` — that's the conversion-ON escape and falls into cmd's interactive prompt under our hardening.
+- Native-exe FILE-PATH args (`findstr /pat /tmp/foo`, `where /c/Users/...`) get the literal POSIX string and fail. Use `cygpath -w` to convert, or run the file-path-bearing command in PowerShell.
+- `findstr` and `tasklist | findstr` stdin pipes DO work in current git-for-windows (despite older upstream MSYS2 issues claiming otherwise).
+
+Before trusting any "port empty / process not found" result, run `node tools/instrument-check.mjs <port|proc> <target>` — it compares findstr vs grep and adds an independent http witness to catch broken-instrument traps. Full background: `docs/superpowers/specs/scans/msys-rootcause-synthesis-2026-05-28.md`.
