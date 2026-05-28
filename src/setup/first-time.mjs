@@ -111,10 +111,13 @@ async function stepVeinRootEnv(repoRoot) {
   }
 
   if (process.platform === "win32") {
+    // Pass the value via the process env (read as $env:... in PowerShell) rather
+    // than interpolating it into the command string, so a path containing quotes
+    // or cmd/PowerShell metacharacters cannot break out or inject commands.
     const result = await exec(
       `powershell -NonInteractive -Command ` +
-        `"[Environment]::SetEnvironmentVariable('VEIN_LAUNCH_ROOT','${repoRoot}','User')"`,
-      { shellMode: true, timeout: 10_000 },
+        `"[Environment]::SetEnvironmentVariable('VEIN_LAUNCH_ROOT', $env:VEIN_SETUP_VALUE, 'User')"`,
+      { shellMode: true, timeout: 10_000, env: { ...process.env, VEIN_SETUP_VALUE: repoRoot } },
     );
     return {
       ok: result.ok,
@@ -173,10 +176,12 @@ async function stepCliproxyKey(home) {
 
   // Persist in User env (Windows)
   if (process.platform === "win32") {
+    // Value passed via the process env (read as $env:... in PowerShell), never
+    // interpolated into the command string — no injection via the key value.
     await exec(
       `powershell -NonInteractive -Command ` +
-        `"[Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY','${key}','User')"`,
-      { shellMode: true, timeout: 10_000 },
+        `"[Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY', $env:VEIN_SETUP_VALUE, 'User')"`,
+      { shellMode: true, timeout: 10_000, env: { ...process.env, VEIN_SETUP_VALUE: key } },
     );
   }
 
