@@ -25,7 +25,7 @@ module.exports = {
       interpreter_args: "--input-type=module",
       cwd: repoRoot,
       env: {
-        MANAGEMENT_PASSWORD: process.env.MANAGEMENT_PASSWORD ?? "",
+        MANAGEMENT_PASSWORD: process.env.MANAGEMENT_PASSWORD || "vein-admin",
         CLIPROXY_PORT: process.env.CLIPROXY_PORT ?? "8317",
         NODE_ENV: "production",
       },
