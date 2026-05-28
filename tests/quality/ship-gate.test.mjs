@@ -1,6 +1,7 @@
 /**
- * Tests for ship-gate.mjs — dual-model pre-merge quality gate.
- * Second model is now `codex review` (not claude --review).
+ * Tests for ship-gate.mjs — true dual-model pre-merge quality gate.
+ * Pass 1: GPT-5.5 @ xhigh (deep correctness review)
+ * Pass 2: GPT-5.4-mini @ medium (fast heuristic scan — different model = different perspective)
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -113,14 +114,37 @@ describe("runShipGate", () => {
     expect(result.passed).toBe(false);
   });
 
-  it("codex review uses model gpt-5.5 and effort xhigh via -c flags", async () => {
+  it("pass 1 uses gpt-5.5 @ xhigh, pass 2 uses gpt-5.4-mini @ medium (different models)", async () => {
     execArgs.mockResolvedValue(makeExecResult(""));
     await runShipGate();
     const calls = execArgs.mock.calls;
-    for (const [, args] of calls) {
-      const argsStr = args.join(" ");
-      expect(argsStr).toContain("gpt-5.5");
-      expect(argsStr).toContain("xhigh");
-    }
+    expect(calls).toHaveLength(2);
+
+    // Pass 1: GPT-5.5 xhigh
+    const pass1Args = calls[0][1].join(" ");
+    expect(pass1Args).toContain("gpt-5.5");
+    expect(pass1Args).toContain("xhigh");
+
+    // Pass 2: GPT-5.4-mini medium — must differ from pass 1
+    const pass2Args = calls[1][1].join(" ");
+    expect(pass2Args).toContain("gpt-5.4-mini");
+    expect(pass2Args).toContain("medium");
+
+    // The two passes must use DIFFERENT models (the core fix)
+    expect(pass1Args).not.toEqual(pass2Args);
+  });
+
+  it("caller can override pass 1 model/effort independently of pass 2", async () => {
+    execArgs.mockResolvedValue(makeExecResult(""));
+    await runShipGate({ model: "gpt-4o", effort: "high" });
+    const calls = execArgs.mock.calls;
+    const pass1Args = calls[0][1].join(" ");
+    const pass2Args = calls[1][1].join(" ");
+    // Pass 1 uses the override
+    expect(pass1Args).toContain("gpt-4o");
+    expect(pass1Args).toContain("high");
+    // Pass 2 still uses its own default cheap-lane model
+    expect(pass2Args).toContain("gpt-5.4-mini");
+    expect(pass2Args).toContain("medium");
   });
 });

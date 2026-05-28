@@ -1,10 +1,11 @@
 /**
  * Dual-model pre-merge quality gate.
- * Runs two independent Codex (GPT-5.5) review passes in parallel and compares findings.
+ * Runs two independent Codex review passes in parallel using DIFFERENT models
+ * to get genuinely distinct perspectives on the diff.
  *
- * Previously this file invoked `claude --review --output json`, which is NOT a real Claude Code
- * CLI subcommand and caused the gate to always return passed=false silently. It is now replaced
- * with a second `codex review` pass (same model, same effort) for a true dual-pass gate.
+ * Pass 1 (codex): GPT-5.5 @ xhigh — deep reasoning, catches subtle correctness bugs.
+ * Pass 2 (claude): GPT-5.4-mini @ medium — fast heuristic scan, catches different patterns
+ *   (style drift, obvious errors, missing error handling) that the heavy model may deprioritize.
  *
  * Security: all arguments are passed as arrays via execArgs (shell:false).
  */
@@ -32,23 +33,41 @@ function codexReviewArgs(model, effort) {
   return ["review", "-c", `model="${model}"`, "-c", `effort="${effort}"`];
 }
 
+/** Default models for each pass — deliberately different to get independent perspectives. */
+const PASS1_MODEL = "gpt-5.5";
+const PASS1_EFFORT = "xhigh";
+const PASS2_MODEL = "gpt-5.4-mini";
+const PASS2_EFFORT = "medium";
+
 /**
- * Run two independent Codex review passes in parallel and compare findings.
+ * Run two independent Codex review passes in parallel using different models.
+ * Pass 1 uses GPT-5.5 @ xhigh; Pass 2 uses GPT-5.4-mini @ medium.
+ * Callers may override the Pass 1 model/effort; Pass 2 always uses the cheap-lane model
+ * to ensure the two perspectives are genuinely distinct.
+ *
  * @param {Object} options
- * @param {string} [options.model="gpt-5.5"]
- * @param {string} [options.effort="xhigh"]
+ * @param {string} [options.model="gpt-5.5"]   Pass 1 model
+ * @param {string} [options.effort="xhigh"]    Pass 1 effort
+ * @param {string} [options.model2="gpt-5.4-mini"]  Pass 2 model
+ * @param {string} [options.effort2="medium"]  Pass 2 effort
  * @param {number} [options.timeout=180000]
  * @returns {Promise<ShipGateResult>}
  */
 export async function runShipGate(options = {}) {
-  const { model = "gpt-5.5", effort = "xhigh", timeout = 180_000 } = options;
+  const {
+    model = PASS1_MODEL,
+    effort = PASS1_EFFORT,
+    model2 = PASS2_MODEL,
+    effort2 = PASS2_EFFORT,
+    timeout = 180_000,
+  } = options;
   const start = performance.now();
 
-  // Two independent codex review passes — no claude CLI involved.
-  const args = codexReviewArgs(model, effort);
+  // Pass 1: GPT-5.5 xhigh — deep correctness review
+  // Pass 2: GPT-5.4-mini medium — fast heuristic scan with a different model
   const [codexResult, claudeResult] = await Promise.all([
-    execArgs("codex", args, { timeout }),
-    execArgs("codex", args, { timeout }),
+    execArgs("codex", codexReviewArgs(model, effort), { timeout }),
+    execArgs("codex", codexReviewArgs(model2, effort2), { timeout }),
   ]);
 
   const codexFailed = !codexResult.ok;

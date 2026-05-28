@@ -4,14 +4,14 @@
  * runCodexReview is mocked so no real Codex CLI or network call is made.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock codex-review before importing the module under test
 vi.mock("../../src/quality/codex-review.mjs", () => ({
   runCodexReview: vi.fn(),
 }));
 
-import { handleStop } from "../../src/hooks/stop-handler.mjs";
+import { getVeinContext, handleStop } from "../../src/hooks/stop-handler.mjs";
 import { runCodexReview } from "../../src/quality/codex-review.mjs";
 
 // ---------------------------------------------------------------------------
@@ -90,5 +90,95 @@ describe("handleStop", () => {
     expect(result.blockers).toBe(0);
     expect(result.message).toContain("Review failed");
     expect(result.message).toContain("codex binary not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getVeinContext
+// ---------------------------------------------------------------------------
+
+describe("getVeinContext", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    // Restore env after each test
+    for (const key of ["VEIN_LAUNCHED", "VEIN_PROJECT"]) {
+      if (key in originalEnv) {
+        process.env[key] = originalEnv[key];
+      } else {
+        delete process.env[key];
+      }
+    }
+  });
+
+  it("returns veinLaunched=false when VEIN_LAUNCHED is not set", () => {
+    delete process.env.VEIN_LAUNCHED;
+    delete process.env.VEIN_PROJECT;
+    const ctx = getVeinContext();
+    expect(ctx.veinLaunched).toBe(false);
+    expect(ctx.project).toBe("");
+  });
+
+  it("returns veinLaunched=true and project when env vars are set", () => {
+    process.env.VEIN_LAUNCHED = "1";
+    process.env.VEIN_PROJECT = "my-project";
+    const ctx = getVeinContext();
+    expect(ctx.veinLaunched).toBe(true);
+    expect(ctx.project).toBe("my-project");
+  });
+
+  it("returns veinLaunched=false when VEIN_LAUNCHED is '0'", () => {
+    process.env.VEIN_LAUNCHED = "0";
+    const ctx = getVeinContext();
+    expect(ctx.veinLaunched).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// handleStop — VEIN_LAUNCHED integration
+// ---------------------------------------------------------------------------
+
+describe("handleStop with VEIN_LAUNCHED", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    for (const key of ["VEIN_LAUNCHED", "VEIN_PROJECT"]) {
+      if (key in originalEnv) {
+        process.env[key] = originalEnv[key];
+      } else {
+        delete process.env[key];
+      }
+    }
+  });
+
+  it("includes project tag in message when VEIN_LAUNCHED=1 and VEIN_PROJECT is set", async () => {
+    process.env.VEIN_LAUNCHED = "1";
+    process.env.VEIN_PROJECT = "vein-launch";
+    runCodexReview.mockResolvedValue(makeReviewResult({ blockers: 0, warnings: 1 }));
+    const result = await handleStop({});
+    expect(result.message).toContain("[vein-launch]");
+    expect(result.project).toBe("vein-launch");
+  });
+
+  it("omits project tag when VEIN_LAUNCHED is not set", async () => {
+    delete process.env.VEIN_LAUNCHED;
+    delete process.env.VEIN_PROJECT;
+    runCodexReview.mockResolvedValue(makeReviewResult({ blockers: 0, warnings: 0 }));
+    const result = await handleStop({});
+    expect(result.message).not.toContain("[");
+    expect(result.project).toBe("");
+  });
+
+  it("includes project tag in blocker message when vein-launched", async () => {
+    process.env.VEIN_LAUNCHED = "1";
+    process.env.VEIN_PROJECT = "my-app";
+    runCodexReview.mockResolvedValue(makeReviewResult({ blockers: 2 }));
+    const result = await handleStop({});
+    expect(result.message).toContain("[my-app]");
+    expect(result.message).toContain("2 blocker");
   });
 });
