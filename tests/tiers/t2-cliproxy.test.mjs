@@ -5,7 +5,12 @@ vi.mock("../../src/lib/shell.mjs", () => ({
   exec: vi.fn(),
 }));
 
+vi.mock("node:fs/promises", () => ({
+  readdir: vi.fn(),
+}));
+
 const { exec } = await import("../../src/lib/shell.mjs");
+const { readdir } = await import("node:fs/promises");
 const { check, repair, meta } = await import("../../src/tiers/t2-cliproxy.mjs");
 
 describe("t2-cliproxy", () => {
@@ -114,7 +119,7 @@ describe("t2-cliproxy", () => {
   });
 
   describe("check — deep mode HTTP health", () => {
-    it("PASSes when health endpoint returns ok with accounts", async () => {
+    it("PASSes when daemon is healthy and auth-dir has OAuth credentials", async () => {
       exec.mockResolvedValueOnce({
         ok: true,
         stdout: "status      | online",
@@ -123,8 +128,13 @@ describe("t2-cliproxy", () => {
         timedOut: false,
       });
 
-      const mockJson = vi.fn().mockResolvedValue({ status: "ok", accounts: ["acct1", "acct2"] });
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
       fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      readdir.mockResolvedValueOnce([
+        "claude-a@example.com.json",
+        "claude-b@example.com.json",
+        "codex-c@example.com.json",
+      ]);
 
       const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
 
@@ -132,6 +142,30 @@ describe("t2-cliproxy", () => {
       expect(fetch).toHaveBeenCalledWith(
         "http://localhost:8317/healthz",
         expect.objectContaining({ signal: expect.any(Object) }),
+      );
+      expect(result.evidence.find((e) => e.check === "cliproxy-accounts").actual).toContain(
+        "3 OAuth account(s)",
+      );
+    });
+
+    it("PASSes with informational evidence when auth-dir is missing (non-default path)", async () => {
+      exec.mockResolvedValueOnce({
+        ok: true,
+        stdout: "status      | online",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
+      fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      readdir.mockRejectedValueOnce(new Error("ENOENT: auth-dir missing"));
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
+
+      expect(result.severity).toBe(Severity.PASS);
+      expect(result.evidence.find((e) => e.check === "cliproxy-accounts").actual).toContain(
+        "non-default path",
       );
     });
 
@@ -188,7 +222,7 @@ describe("t2-cliproxy", () => {
       expect(result.evidence[0].remediation).toBeTruthy();
     });
 
-    it("WARNs when no accounts configured in health response", async () => {
+    it("WARNs when daemon is healthy but auth-dir is empty (0 OAuth credentials)", async () => {
       exec.mockResolvedValueOnce({
         ok: true,
         stdout: "status      | online",
@@ -197,8 +231,9 @@ describe("t2-cliproxy", () => {
         timedOut: false,
       });
 
-      const mockJson = vi.fn().mockResolvedValue({ status: "ok", accounts: [] });
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
       fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      readdir.mockResolvedValueOnce([]);
 
       const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
 

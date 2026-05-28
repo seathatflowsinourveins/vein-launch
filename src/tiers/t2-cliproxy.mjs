@@ -1,7 +1,35 @@
+import { readdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createResult, Severity } from "../lib/result.mjs";
 import { exec } from "../lib/shell.mjs";
 
 export const meta = { id: "t2-cliproxy", name: "CLIProxy", modes: ["fast", "deep", "repair"] };
+
+/**
+ * Count OAuth credential files in CLIProxy's auth-dir.
+ *
+ * CLIProxy /healthz returns only `{status:"ok"}` — no account inventory —
+ * so the prior implementation always WARNed "No accounts configured" in
+ * deep mode even when accounts existed. The real source of truth is the
+ * filesystem auth-dir (default ~/.cli-proxy-api/), where each provider
+ * OAuth credential is one `<channel>-<id>.json` file.
+ *
+ * Returns null when the dir is missing (non-default install path) — caller
+ * surfaces that as informational, not a failure.
+ *
+ * @returns {Promise<number | null>}
+ */
+export async function countCliproxyAccounts(authDir = join(homedir(), ".cli-proxy-api")) {
+  try {
+    const entries = await readdir(authDir);
+    return entries.filter((f) =>
+      /^(claude|codex|gemini|grok|qwen|gpt|kimi|xai|antigravity|ampcode)-.+\.(json|yaml)$/.test(f),
+    ).length;
+  } catch {
+    return null;
+  }
+}
 
 /** @returns {import("../lib/result.mjs").TierResult} */
 function skipResult(durationMs) {
@@ -149,10 +177,9 @@ export async function check(config, context) {
     });
   }
 
-  const accounts = httpResult.body?.accounts ?? [];
-  const hasAccounts = Array.isArray(accounts) && accounts.length > 0;
+  const accountCount = await countCliproxyAccounts();
 
-  if (!hasAccounts) {
+  if (accountCount === 0) {
     return createResult({
       tierId: meta.id,
       tierName: meta.name,
@@ -160,22 +187,27 @@ export async function check(config, context) {
       evidence: [
         {
           check: "cliproxy-accounts",
-          actual: "No accounts configured",
-          remediation: "Add at least one account to CLIProxy configuration",
+          actual: "0 OAuth credentials in ~/.cli-proxy-api/",
+          remediation: "Add at least one provider account via the CLIProxy login flow",
         },
       ],
       durationMs: performance.now() - start,
     });
   }
 
+  const accountEvidence =
+    accountCount === null
+      ? {
+          check: "cliproxy-accounts",
+          actual: "auth-dir not at ~/.cli-proxy-api/ (non-default path — count unknown)",
+        }
+      : { check: "cliproxy-accounts", actual: `${accountCount} OAuth account(s) configured` };
+
   return createResult({
     tierId: meta.id,
     tierName: meta.name,
     severity: Severity.PASS,
-    evidence: [
-      processResult.evidence,
-      { check: "cliproxy-accounts", actual: `${accounts.length} account(s) configured` },
-    ],
+    evidence: [processResult.evidence, httpResult.evidence, accountEvidence],
     durationMs: performance.now() - start,
   });
 }
