@@ -73,7 +73,14 @@ function checkPort(port) {
   return { native, posix };
 }
 
+// Pattern is interpolated into a shell pipeline; restrict to safe chars so
+// `node instrument-check.mjs proc "x; rm -rf /"` cannot inject shell syntax.
+const SAFE_PATTERN = /^[A-Za-z0-9._-]+$/;
+
 function checkProc(pattern) {
+  if (!SAFE_PATTERN.test(pattern)) {
+    throw new Error(`unsafe pattern: ${JSON.stringify(pattern)} (allowed: [A-Za-z0-9._-]+)`);
+  }
   const native = run(`tasklist | findstr /i ${pattern}`);
   const posix = run(`tasklist | grep -i ${pattern}`);
   return { native, posix };

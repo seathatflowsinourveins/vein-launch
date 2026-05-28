@@ -135,8 +135,8 @@ describe("t6-codegraph", () => {
     it("calls gitnexus analyze", async () => {
       exec.mockResolvedValueOnce(ok("analyze complete"));
       await repair({}, {});
-      expect(exec).toHaveBeenCalledWith(expect.stringContaining("gitnexus"));
-      expect(exec).toHaveBeenCalledWith(expect.stringContaining("analyze"));
+      expect(exec).toHaveBeenCalledWith(expect.stringContaining("gitnexus"), expect.anything());
+      expect(exec).toHaveBeenCalledWith(expect.stringContaining("analyze"), expect.anything());
     });
 
     it("returns PASS on successful analyze", async () => {

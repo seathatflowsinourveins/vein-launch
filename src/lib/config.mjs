@@ -12,7 +12,7 @@ import Ajv from "ajv";
 const DEFAULTS_PATH = new URL("../../config/default.json", import.meta.url);
 const SCHEMA_PATH = new URL("../../config/schema.json", import.meta.url);
 
-const FORBIDDEN_ENV = ["ANTHROPIC_API_KEY", "PATH", "HOME", "USERPROFILE"];
+const FORBIDDEN_ENV = ["ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "PATH", "HOME", "USERPROFILE"];
 const VALID_MODES = ["fast", "deep", "repair"];
 
 export async function loadConfig(args) {

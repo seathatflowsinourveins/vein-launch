@@ -3,11 +3,13 @@ import { exec } from "../lib/shell.mjs";
 
 export const meta = { id: "t6-codegraph", name: "CodeGraph", modes: ["deep", "repair"] };
 
-export async function check(_config, _context) {
+export async function check(config, _context) {
   const start = performance.now();
   const evidence = [];
+  const cwd = config?.projectDir;
+  const execOpts = cwd ? { cwd } : {};
 
-  const gnVersion = await exec("npx gitnexus@1.6.5 --version");
+  const gnVersion = await exec("npx gitnexus@1.6.5 --version", execOpts);
   if (!gnVersion.ok) {
     evidence.push({ check: "gitnexus-available", actual: "gitnexus not available via npx" });
     return createResult({
@@ -19,7 +21,7 @@ export async function check(_config, _context) {
     });
   }
 
-  const status = await exec("npx gitnexus@1.6.5 status");
+  const status = await exec("npx gitnexus@1.6.5 status", execOpts);
   if (!status.ok) {
     evidence.push({ check: "gitnexus-index", actual: "repo not indexed" });
     return createResult({
@@ -56,9 +58,11 @@ export async function check(_config, _context) {
   });
 }
 
-export async function repair(_config, _context) {
+export async function repair(config, _context) {
   const start = performance.now();
-  const result = await exec("npx gitnexus@1.6.5 analyze");
+  const cwd = config?.projectDir;
+  const execOpts = cwd ? { cwd } : {};
+  const result = await exec("npx gitnexus@1.6.5 analyze", execOpts);
   return createResult({
     tierId: meta.id,
     tierName: meta.name,

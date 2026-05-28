@@ -219,7 +219,17 @@ export async function evaluateGate({
       "Eval gate: vitest reported 0 total tests — refusing to seed a 0-score baseline (treat as infrastructure failure)",
     );
   }
+  if (!Number.isFinite(numPassedTests) || numPassedTests < 0) {
+    throw new Error(
+      `Eval gate: vitest reported non-finite numPassedTests (${numPassedTests}) — refusing to compute a NaN score`,
+    );
+  }
   const score = (numPassedTests / numTotalTests) * 100;
+  if (!Number.isFinite(score)) {
+    throw new Error(
+      `Eval gate: score computed as ${score} (non-finite) — refusing to poison baseline`,
+    );
+  }
 
   // 3b. Run behavioral eval (promptfoo) if runner is injected
   /** @type {number | undefined} */
