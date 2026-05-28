@@ -1,0 +1,5 @@
+{
+  "managementKey": "your-management-key-here",
+  "pollIntervalMs": 30000,
+  "cliproxyPort": 8317
+}
