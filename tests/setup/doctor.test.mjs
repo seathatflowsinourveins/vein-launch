@@ -6,14 +6,12 @@
  * and that the summary line is accurate.
  */
 
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Module mocks ─────────────────────────────────────────────────────────────
 
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
-  readlink: vi.fn(),
   access: vi.fn(),
   stat: vi.fn(),
 }));
@@ -40,7 +38,7 @@ function makeInstallJson(overrides = {}) {
     version: "1.2.0",
     repoRoot: "/repo",
     installedAt: "2026-05-27T00:00:00.000Z",
-    setupSteps: ["create-dirs", "symlinks", "install-json", "cliproxy-key"],
+    setupSteps: ["create-dirs", "npm-link", "install-json", "cliproxy-key"],
     ...overrides,
   });
 }
@@ -70,9 +68,6 @@ function mockAllPass({ repoRoot = "/repo" } = {}) {
     return Promise.reject({ code: "ENOENT" });
   });
 
-  // Symlink check: readlink returns expected target
-  fsp.readlink.mockResolvedValue(join(repoRoot, "bin", "vein.ps1"));
-
   // access: everything present
   fsp.access.mockResolvedValue(undefined);
 
@@ -86,6 +81,7 @@ function mockAllPass({ repoRoot = "/repo" } = {}) {
   // exec for PM2, healthz (node -e), tools, git, etc.
   shellExec.mockImplementation((cmd) => {
     const cs = String(cmd);
+    if (cs.includes("npm ls") && cs.includes("vein-launch")) return makeExecOk("vein-launch@1.3.0");
     if (cs.includes("pm2") && cs.includes("list")) return makeExecOk("online");
     if (cs.includes("pm2") && cs.includes("cliproxy")) return makeExecOk("online");
     // healthz probe: node inline script that prints the status code
@@ -254,28 +250,32 @@ describe("runDoctor — ANTHROPIC_API_KEY check", () => {
   });
 });
 
-describe("runDoctor — symlink check", () => {
+describe("runDoctor — npm-link check", () => {
   afterEach(() => {
     delete process.env.VEIN_LAUNCH_ROOT;
     delete process.env.ANTHROPIC_API_KEY;
     vi.clearAllMocks();
   });
 
-  it("fails when vein.ps1 symlink target does not match repo", async () => {
+  it("fails when vein-launch not in npm global", async () => {
     mockAllPass();
-    fsp.readlink.mockResolvedValue("/wrong/path/bin/vein.ps1");
+    shellExec.mockImplementation(async (cmd) => {
+      if (cmd.includes("npm ls"))
+        return { ok: false, stdout: "", stderr: "not found", exitCode: 1, timedOut: false };
+      return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+    });
 
     const { checks } = await runDoctor({ repoRoot: "/repo" });
-    const check = checks.find((c) => c.name === "vein-ps1-symlink");
+    const check = checks.find((c) => c.name === "vein-npm-link");
     expect(check).toBeDefined();
     expect(check.status).toBe("fail");
   });
 
-  it("passes when vein.ps1 symlink points to correct repo path", async () => {
+  it("passes when vein-launch is in npm global", async () => {
     mockAllPass();
 
     const { checks } = await runDoctor({ repoRoot: "/repo" });
-    const check = checks.find((c) => c.name === "vein-ps1-symlink");
+    const check = checks.find((c) => c.name === "vein-npm-link");
     expect(check).toBeDefined();
     expect(check.status).toBe("pass");
   });
@@ -349,12 +349,12 @@ describe("runDoctor — version-sync check", () => {
 describe("formatDoctorOutput", () => {
   it("includes check names in output", () => {
     const checks = [
-      { name: "vein-ps1-symlink", status: "pass", message: "ok" },
+      { name: "vein-npm-link", status: "pass", message: "ok" },
       { name: "install-json", status: "fail", message: "missing" },
     ];
     const summary = { passed: 1, warned: 0, failed: 1, total: 2 };
     const output = formatDoctorOutput(checks, summary);
-    expect(output).toMatch(/vein-ps1-symlink|vein\.ps1/i);
+    expect(output).toMatch(/vein-npm-link|vein\.ps1/i);
     expect(output).toMatch(/install/i);
   });
 
