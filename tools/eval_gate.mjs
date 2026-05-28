@@ -14,7 +14,7 @@
  *   - Gate blocks if EITHER vitest score OR behavioral score regresses by >5pp
  */
 
-import { execFile } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -22,6 +22,7 @@ import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 
 /** Regression band in percentage points — block when drop exceeds this value */
 const REGRESSION_BAND_PP = 5;
@@ -142,9 +143,7 @@ function extractOverrideRationale(msg) {
 async function defaultTestRunner() {
   let stdout;
   try {
-    const result = await execFileAsync("npx", ["vitest", "run", "--reporter=json"], {
-      shell: true,
-    });
+    const result = await execAsync("npx vitest run --reporter=json");
     stdout = result.stdout;
   } catch (err) {
     // vitest exits non-zero when tests fail but still writes JSON to stdout —
@@ -163,7 +162,7 @@ async function defaultTestRunner() {
  * @returns {Promise<string>}
  */
 async function defaultGitSha() {
-  const { stdout } = await execFileAsync("git", ["rev-parse", "--short", "HEAD"], { shell: true });
+  const { stdout } = await execFileAsync("git", ["rev-parse", "--short", "HEAD"]);
   return stdout.trim();
 }
 

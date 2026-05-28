@@ -52,7 +52,7 @@ directory is created automatically on first use. `docs/eval-history.jsonl` is gi
 ## Quality Chain
 
 Prechecks → Launch → [Per-turn: RTK + context-mode] → [Per-stop: GPT-5.5 xhigh]
-→ [Pre-PR: ship-gate dual-model] → [CI: biome + vitest + promptfoo + CodeQL]
+→ [Pre-PR: ship-gate dual-model] → [CI: biome + vitest + promptfoo] → [CodeQL: PR security scan]
 
 ## Code Conventions
 
