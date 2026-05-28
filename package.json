@@ -10,6 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "eval": "vitest run evals/deepeval/",
+    "eval:legacy": "promptfoo eval -c evals/promptfooconfig.yaml",
     "lint": "biome check .",
     "lint:fix": "biome check --fix .",
     "format": "biome format --write .",
@@ -41,6 +43,7 @@
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
     "@vitest/coverage-v8": "^3.2.0",
+    "deepeval": "^0.1.29",
     "promptfoo": "0.121.12",
     "vitest": "^3.2.0"
   },
