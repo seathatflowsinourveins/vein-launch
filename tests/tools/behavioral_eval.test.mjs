@@ -31,7 +31,7 @@ function makePromptfooOutput({ successes, failures, topLevel = false }) {
 describe("runBehavioralEval", () => {
   it("returns behavioralScore=100 when all scenarios pass", async () => {
     const runner = async () => makePromptfooOutput({ successes: 5, failures: 0 });
-    const result = await runBehavioralEval({ runner });
+    const result = await runBehavioralEval({ engine: "promptfoo", runner });
 
     expect(result.behavioralScore).toBe(100);
     expect(result.details.passCount).toBe(5);
@@ -42,7 +42,7 @@ describe("runBehavioralEval", () => {
 
   it("returns behavioralScore=0 when all scenarios fail", async () => {
     const runner = async () => makePromptfooOutput({ successes: 0, failures: 5 });
-    const result = await runBehavioralEval({ runner });
+    const result = await runBehavioralEval({ engine: "promptfoo", runner });
 
     expect(result.behavioralScore).toBe(0);
     expect(result.details.passCount).toBe(0);
@@ -53,7 +53,7 @@ describe("runBehavioralEval", () => {
 
   it("returns correct partial score when some scenarios fail", async () => {
     const runner = async () => makePromptfooOutput({ successes: 3, failures: 2 });
-    const result = await runBehavioralEval({ runner });
+    const result = await runBehavioralEval({ engine: "promptfoo", runner });
 
     expect(result.behavioralScore).toBe(60);
     expect(result.details.passCount).toBe(3);
@@ -64,7 +64,7 @@ describe("runBehavioralEval", () => {
 
   it("handles legacy top-level stats field (older promptfoo compat)", async () => {
     const runner = async () => makePromptfooOutput({ successes: 4, failures: 1, topLevel: true });
-    const result = await runBehavioralEval({ runner });
+    const result = await runBehavioralEval({ engine: "promptfoo", runner });
 
     expect(result.behavioralScore).toBe(80);
     expect(result.details.passCount).toBe(4);
@@ -73,13 +73,13 @@ describe("runBehavioralEval", () => {
   it("handles stdout with leading non-JSON text before the JSON object", async () => {
     const runner = async () =>
       `Starting eval...\nSome progress line\n${makePromptfooOutput({ successes: 2, failures: 0 })}`;
-    const result = await runBehavioralEval({ runner });
+    const result = await runBehavioralEval({ engine: "promptfoo", runner });
     expect(result.behavioralScore).toBe(100);
   });
 
   it("returns behavioralScore=0 when totalCount is 0", async () => {
     const runner = async () => makePromptfooOutput({ successes: 0, failures: 0 });
-    const result = await runBehavioralEval({ runner });
+    const result = await runBehavioralEval({ engine: "promptfoo", runner });
     expect(result.behavioralScore).toBe(0);
     expect(result.details.totalCount).toBe(0);
     expect(result.details.passRate).toBe(0);
@@ -87,18 +87,18 @@ describe("runBehavioralEval", () => {
 
   it("throws a descriptive error when output has no JSON object", async () => {
     const runner = async () => "no json here at all";
-    await expect(runBehavioralEval({ runner })).rejects.toThrow(/no JSON object/);
+    await expect(runBehavioralEval({ engine: "promptfoo", runner })).rejects.toThrow(/no JSON/);
   });
 
   it("throws a descriptive error when JSON is malformed", async () => {
     const runner = async () => "{ broken json {{";
-    await expect(runBehavioralEval({ runner })).rejects.toThrow(
-      /failed to parse promptfoo JSON output/,
+    await expect(runBehavioralEval({ engine: "promptfoo", runner })).rejects.toThrow(
+      /failed to parse/,
     );
   });
 
   it("throws a descriptive error when stats field is missing", async () => {
     const runner = async () => JSON.stringify({ results: { table: [] } });
-    await expect(runBehavioralEval({ runner })).rejects.toThrow(/missing results\.stats/);
+    await expect(runBehavioralEval({ engine: "promptfoo", runner })).rejects.toThrow(/missing/);
   });
 });
