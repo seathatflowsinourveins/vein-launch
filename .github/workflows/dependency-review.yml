@@ -23,5 +23,9 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci
-      - name: npm audit (high severity blocks merge)
-        run: npm audit --audit-level=high
+      - name: npm audit (production deps, high+ blocks merge)
+        # Scope to production deps via --omit=dev so dev-only CVEs (currently
+        # protobufjs/uuid transitive through deepeval, no upstream fix yet)
+        # don't block PRs. The dev-dep CVEs are tracked in the audit backlog.
+        # Production deps are the real attack surface for downstream users.
+        run: npm audit --audit-level=high --omit=dev
