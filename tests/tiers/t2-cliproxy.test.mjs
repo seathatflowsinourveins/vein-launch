@@ -131,9 +131,9 @@ describe("t2-cliproxy", () => {
       const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
       fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
       readdir.mockResolvedValueOnce([
-        "claude-a@example.com.json",
-        "claude-b@example.com.json",
-        "codex-c@example.com.json",
+        { name: "claude-a@example.com.json", isFile: () => true },
+        { name: "claude-b@example.com.json", isFile: () => true },
+        { name: "codex-c@example.com.json", isFile: () => true },
       ]);
 
       const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
@@ -148,7 +148,7 @@ describe("t2-cliproxy", () => {
       );
     });
 
-    it("PASSes with informational evidence when auth-dir is missing (non-default path)", async () => {
+    it("ignores non-file entries and non-credential filenames", async () => {
       exec.mockResolvedValueOnce({
         ok: true,
         stdout: "status      | online",
@@ -159,7 +159,34 @@ describe("t2-cliproxy", () => {
 
       const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
       fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
-      readdir.mockRejectedValueOnce(new Error("ENOENT: auth-dir missing"));
+      readdir.mockResolvedValueOnce([
+        { name: "claude-a@example.com.json", isFile: () => true },
+        { name: "logs", isFile: () => false }, // directory — should not count
+        { name: "README.md", isFile: () => true }, // not a credential — should not count
+        { name: "codex-b@example.com.json", isFile: () => true },
+      ]);
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
+
+      expect(result.severity).toBe(Severity.PASS);
+      expect(result.evidence.find((e) => e.check === "cliproxy-accounts").actual).toContain(
+        "2 OAuth account(s)",
+      );
+    });
+
+    it("PASSes with informational evidence when auth-dir is missing (ENOENT)", async () => {
+      exec.mockResolvedValueOnce({
+        ok: true,
+        stdout: "status      | online",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
+      fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      const enoent = Object.assign(new Error("ENOENT: auth-dir missing"), { code: "ENOENT" });
+      readdir.mockRejectedValueOnce(enoent);
 
       const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
 
@@ -167,6 +194,28 @@ describe("t2-cliproxy", () => {
       expect(result.evidence.find((e) => e.check === "cliproxy-accounts").actual).toContain(
         "non-default path",
       );
+    });
+
+    it("BLOCKs when auth-dir readdir fails with non-ENOENT (e.g. EACCES)", async () => {
+      exec.mockResolvedValueOnce({
+        ok: true,
+        stdout: "status      | online",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
+      fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      const eacces = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      readdir.mockRejectedValueOnce(eacces);
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
+
+      expect(result.severity).toBe(Severity.BLOCK);
+      const e = result.evidence.find((ev) => ev.check === "cliproxy-accounts");
+      expect(e.actual).toContain("EACCES");
+      expect(e.remediation).toBeTruthy();
     });
 
     it("BLOCKs when health endpoint is unreachable (fetch throws)", async () => {

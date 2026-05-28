@@ -15,20 +15,28 @@ export const meta = { id: "t2-cliproxy", name: "CLIProxy", modes: ["fast", "deep
  * filesystem auth-dir (default ~/.cli-proxy-api/), where each provider
  * OAuth credential is one `<channel>-<id>.json` file.
  *
- * Returns null when the dir is missing (non-default install path) — caller
- * surfaces that as informational, not a failure.
+ * Returns null ONLY when the dir is absent (ENOENT — non-default install
+ * path). Other readdir errors (EACCES, ENOTDIR, etc.) are propagated so
+ * the tier can surface them as BLOCK evidence rather than silently passing.
  *
+ * @param {string} [authDir] — defaults to ~/.cli-proxy-api/
  * @returns {Promise<number | null>}
  */
 export async function countCliproxyAccounts(authDir = join(homedir(), ".cli-proxy-api")) {
+  let entries;
   try {
-    const entries = await readdir(authDir);
-    return entries.filter((f) =>
-      /^(claude|codex|gemini|grok|qwen|gpt|kimi|xai|antigravity|ampcode)-.+\.(json|yaml)$/.test(f),
-    ).length;
-  } catch {
-    return null;
+    entries = await readdir(authDir, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
   }
+  return entries.filter(
+    (e) =>
+      e.isFile() &&
+      /^(claude|codex|gemini|grok|qwen|gpt|kimi|xai|antigravity|ampcode)-.+\.(json|yaml)$/.test(
+        e.name,
+      ),
+  ).length;
 }
 
 /** @returns {import("../lib/result.mjs").TierResult} */
@@ -177,7 +185,24 @@ export async function check(config, context) {
     });
   }
 
-  const accountCount = await countCliproxyAccounts();
+  let accountCount;
+  try {
+    accountCount = await countCliproxyAccounts();
+  } catch (err) {
+    return createResult({
+      tierId: meta.id,
+      tierName: meta.name,
+      severity: Severity.BLOCK,
+      evidence: [
+        {
+          check: "cliproxy-accounts",
+          actual: `Failed to enumerate auth-dir: ${err.code ?? err.message}`,
+          remediation: "Check ~/.cli-proxy-api/ permissions and ownership",
+        },
+      ],
+      durationMs: performance.now() - start,
+    });
+  }
 
   if (accountCount === 0) {
     return createResult({
