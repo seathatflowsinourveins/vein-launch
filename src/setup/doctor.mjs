@@ -215,7 +215,7 @@ async function checkCliproxy() {
   }
 
   // Probe /healthz
-  const port = process.env.CLIPROXY_PORT ?? "3284";
+  const port = process.env.CLIPROXY_PORT ?? "8317";
   const healthResult = await exec(
     `node -e "const http=require('http');const req=http.get('http://localhost:${port}/healthz',r=>{process.stdout.write(String(r.statusCode));r.destroy()});req.on('error',e=>process.stderr.write(e.message))"`,
     { shellMode: true, timeout: 5_000 },
