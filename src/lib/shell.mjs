@@ -94,7 +94,7 @@ function makeCallback(resolve) {
  * @returns {Promise<ExecResult>}
  */
 export function exec(command, options = {}) {
-  const { timeout = 10_000, cwd, shellMode = false } = options;
+  const { timeout = 10_000, cwd, shellMode = false, env } = options;
   const parts = command.split(/\s+/).filter(Boolean);
   let cmd = parts[0];
   let useShell = shellMode;
@@ -109,7 +109,7 @@ export function exec(command, options = {}) {
     execFile(
       cmd,
       args,
-      { timeout, cwd, shell: useShell, windowsHide: true },
+      { timeout, cwd, env, shell: useShell, windowsHide: true },
       makeCallback(resolve),
     );
   });
@@ -128,7 +128,7 @@ export function exec(command, options = {}) {
  * @returns {Promise<ExecResult>}
  */
 export function execArgs(cmd, args = [], options = {}) {
-  const { timeout = 10_000, cwd, shellMode = false } = options;
+  const { timeout = 10_000, cwd, shellMode = false, env } = options;
   let resolved = cmd;
   let useShell = shellMode;
   if (!shellMode) {
@@ -141,7 +141,7 @@ export function execArgs(cmd, args = [], options = {}) {
     execFile(
       resolved,
       args,
-      { timeout, cwd, shell: useShell, windowsHide: true },
+      { timeout, cwd, env, shell: useShell, windowsHide: true },
       makeCallback(resolve),
     );
   });

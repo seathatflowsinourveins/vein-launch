@@ -13,9 +13,6 @@ import { ExitCodes } from "./lib/result.mjs";
 import { orchestrate } from "./orchestrator.mjs";
 
 const args = process.argv.slice(2);
-if (args.includes("--eval") || args.includes("--eval-mode")) {
-  process.exit(0);
-}
 
 if (args.includes("--manifest")) {
   const { printManifest } = await import("./lib/manifest.mjs");

@@ -64,6 +64,13 @@ export async function loadConfig() {
       ? Number(process.env.CLIPROXY_PORT)
       : (fileConfig.cliproxyPort ?? DEFAULT_PORT);
 
+  if (!Number.isInteger(cliproxyPort) || cliproxyPort < 1 || cliproxyPort > 65535) {
+    throw new Error(
+      `Invalid CLIPROXY_PORT: ${cliproxyPort} (must be integer 1-65535). ` +
+        `Check CLIPROXY_PORT env var or hud-bridge-config.json cliproxyPort field.`,
+    );
+  }
+
   return { managementKey, pollIntervalMs, cliproxyPort };
 }
 

@@ -171,8 +171,26 @@ export async function check(_config, _context) {
 export async function repair(_config, _context) {
   const start = performance.now();
 
-  // Always refresh auth scopes
-  await exec("gh auth refresh -s repo,workflow,security_events");
+  // Always refresh auth scopes. A failed refresh must not be reported as a
+  // successful repair (that would tell the user GitHub auth is fixed when it
+  // is not), so fail closed with the underlying error.
+  const refresh = await exec("gh auth refresh -s repo,workflow,security_events");
+  if (!refresh.ok) {
+    return createResult({
+      tierId: meta.id,
+      tierName: meta.name,
+      severity: Severity.BLOCK,
+      evidence: [
+        {
+          check: "gh-auth-refresh",
+          actual: `gh auth refresh failed: ${refresh.stderr.slice(0, 160) || "unknown error"}`,
+          remediation:
+            "Run 'gh auth login', then 'gh auth refresh -s repo,workflow,security_events' manually",
+        },
+      ],
+      durationMs: performance.now() - start,
+    });
+  }
 
   // Check and fix SSH signing if needed
   const [formatRes, keyRes] = await Promise.all([

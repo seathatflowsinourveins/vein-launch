@@ -3,7 +3,7 @@
 description: "vein-launch behavioral precheck evaluation (Wave 11-B1)"
 
 providers:
-  - id: "exec:node src/orchestrator.mjs --eval-mode {{args}}"
+  - id: "exec:node src/cli.mjs --eval-mode {{args}}"
     label: "vein-precheck"
     config:
       # Pass scenario args as a single positional substitution

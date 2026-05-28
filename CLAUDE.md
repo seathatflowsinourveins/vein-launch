@@ -52,7 +52,36 @@ directory is created automatically on first use. `docs/eval-history.jsonl` is gi
 ## Quality Chain
 
 Prechecks → Launch → [Per-turn: RTK + context-mode] → [Per-stop: GPT-5.5 xhigh]
-→ [Pre-PR: ship-gate dual-model] → [CI: biome + vitest + promptfoo + CodeQL]
+→ [Pre-PR: ship-gate dual-model] → [CI: biome + vitest + promptfoo] → [CodeQL: PR security scan]
+
+### Stop-handler env vars
+
+The Stop hook (`src/hooks/stop-handler-cli.mjs`) reads two opt-in env vars:
+
+- `CODEX_STOP_REVIEW=1` — enables GPT-5.5 Codex review at every stop. Set by
+  `buildLaunchEnv()` in `src/lib/exec.mjs` when `.vein.json` has
+  `quality.codexReview === "every-stop"`. **Unset** → review is skipped.
+- `VEIN_LAUNCHED=1`, `VEIN_PROJECT=<name>` — set by the launcher; the stop
+  handler uses these to scope log file locations.
+
+Without vein-launch in the chain, `CODEX_STOP_REVIEW` is unset and the Stop
+hook completes without invoking Codex. This is intentional opt-in (review is
+expensive); declare it explicitly in `.vein.json` to turn on.
+
+### Other env vars
+
+User-settable:
+
+- `CLIPROXY_PORT` (default `8317`) — overrides the port `doctor.mjs` health-checks and `tools/hud-bridge.mjs` connects to. Must match the actual CLIProxy port; mismatch is silently broken (false-pass health checks).
+- `ANTHROPIC_API_KEY` — Anthropic platform API key (alternative to `claude` CLI subscription); checked by `setup/doctor.mjs` and `setup/first-time.mjs`.
+- `CLAUDE_AI_TOKEN`, `CLAUDE_ACCESS_TOKEN` — `claude.ai` web-session credentials (alternative to API key); checked by `setup/first-time.mjs`.
+- `ENABLE_TOOL_SEARCH` — Claude Code Tool Search toggle; recorded by `tiers/t1-env.mjs`. Project default ON in `settings.json`.
+
+Harness/launcher-set (do not set manually):
+
+- `CLAUDE_HOOK_EVENT` — JSON payload from the Claude Code hook system; read by every `*-cli.mjs` in `src/hooks/`. Malformed JSON is tolerated (warning to stderr, then `{}` default).
+- `VEIN_LAUNCHED=1`, `VEIN_PROJECT=<name>`, `VEIN_LAUNCH_ROOT=<path>` — set by `bin/vein.ps1`; the hooks + setup tools use these to scope log file locations and detect launch context.
+- `WSL_DISTRO_NAME` — set by WSL itself; `setup/index.mjs` detects WSL by its presence.
 
 ## Code Conventions
 
@@ -61,3 +90,19 @@ Prechecks → Launch → [Per-turn: RTK + context-mode] → [Per-stop: GPT-5.5 x
 - Vitest for tests (80% coverage threshold)
 - No default exports — named exports only
 - Errors: throw with context, never swallow silently
+
+## Git Bash / MSYS — Two-Shell Model
+
+Two distinct bash environments live on this Windows host:
+
+1. **Claude Code's Bash-tool subprocess** — harness injects `MSYS_NO_PATHCONV=1` + `MSYS2_ARG_CONV_EXCL=*` (path conversion OFF, broadly).
+2. **Operator's interactive mintty/wezterm shell** — no harness injection (path conversion ON).
+
+Symptoms reproducible in shell 1 may not reproduce in shell 2 and vice-versa. **Always state which shell a defect was observed in.**
+
+In Claude Code Bash tool calls (shell 1):
+- Use `cmd /c '<command>'` (single slash). NEVER `cmd //c` — that's the conversion-ON escape and falls into cmd's interactive prompt under our hardening.
+- Native-exe FILE-PATH args (`findstr /pat /tmp/foo`, `where /c/Users/...`) get the literal POSIX string and fail. Use `cygpath -w` to convert, or run the file-path-bearing command in PowerShell.
+- `findstr` and `tasklist | findstr` stdin pipes DO work in current git-for-windows (despite older upstream MSYS2 issues claiming otherwise).
+
+Before trusting any "port empty / process not found" result, run `node tools/instrument-check.mjs <port|proc> <target>` — it compares findstr vs grep and adds an independent http witness to catch broken-instrument traps. Full background: `docs/superpowers/specs/scans/msys-rootcause-synthesis-2026-05-28.md`.

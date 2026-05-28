@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -15,7 +15,16 @@ const NAME_RE = /^[a-zA-Z0-9-]{1,50}$/;
  */
 export function listAccounts() {
   if (!existsSync(ACCOUNTS_PATH)) return [];
-  return /** @type {Account[]} */ (JSON.parse(readFileSync(ACCOUNTS_PATH, "utf8")));
+  try {
+    const parsed = JSON.parse(readFileSync(ACCOUNTS_PATH, "utf8"));
+    return Array.isArray(parsed) ? /** @type {Account[]} */ (parsed) : [];
+  } catch (err) {
+    // A corrupt/partial accounts.json must not crash every account operation.
+    process.stderr.write(
+      `[vein] WARN: ${ACCOUNTS_PATH} is unreadable or corrupt (${err.message}); treating as empty.\n`,
+    );
+    return [];
+  }
 }
 
 /**
@@ -23,8 +32,13 @@ export function listAccounts() {
  * @param {Account[]} accounts
  */
 function saveAccounts(accounts) {
-  mkdirSync(dirname(ACCOUNTS_PATH), { recursive: true });
-  writeFileSync(ACCOUNTS_PATH, JSON.stringify(accounts, null, 2), "utf8");
+  const dir = dirname(ACCOUNTS_PATH);
+  mkdirSync(dir, { recursive: true });
+  // Atomic write: serialize to a temp file then rename, so a crash mid-write
+  // cannot leave a half-written (corrupt) accounts.json behind.
+  const tmp = join(dir, `.accounts.${process.pid}.tmp`);
+  writeFileSync(tmp, JSON.stringify(accounts, null, 2), "utf8");
+  renameSync(tmp, ACCOUNTS_PATH);
 }
 
 /**

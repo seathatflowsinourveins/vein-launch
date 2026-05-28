@@ -1,7 +1,43 @@
+import { readdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createResult, Severity } from "../lib/result.mjs";
 import { exec } from "../lib/shell.mjs";
 
 export const meta = { id: "t2-cliproxy", name: "CLIProxy", modes: ["fast", "deep", "repair"] };
+
+/**
+ * Count OAuth credential files in CLIProxy's auth-dir.
+ *
+ * CLIProxy /healthz returns only `{status:"ok"}` — no account inventory —
+ * so the prior implementation always WARNed "No accounts configured" in
+ * deep mode even when accounts existed. The real source of truth is the
+ * filesystem auth-dir (default ~/.cli-proxy-api/), where each provider
+ * OAuth credential is one `<channel>-<id>.json` file.
+ *
+ * Returns null ONLY when the dir is absent (ENOENT — non-default install
+ * path). Other readdir errors (EACCES, ENOTDIR, etc.) are propagated so
+ * the tier can surface them as BLOCK evidence rather than silently passing.
+ *
+ * @param {string} [authDir] — defaults to ~/.cli-proxy-api/
+ * @returns {Promise<number | null>}
+ */
+export async function countCliproxyAccounts(authDir = join(homedir(), ".cli-proxy-api")) {
+  let entries;
+  try {
+    entries = await readdir(authDir, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  return entries.filter(
+    (e) =>
+      e.isFile() &&
+      /^(claude|codex|gemini|grok|qwen|gpt|kimi|xai|antigravity|ampcode)-.+\.(json|yaml)$/.test(
+        e.name,
+      ),
+  ).length;
+}
 
 /** @returns {import("../lib/result.mjs").TierResult} */
 function skipResult(durationMs) {
@@ -118,6 +154,27 @@ export async function check(config, context) {
   const evidence = [processResult.evidence];
 
   if (!processResult.ok) {
+    // checkProcess reflects the manager's bookkeeping (pm2/docker), not whether
+    // the proxy is actually answering. The proxy can be live while the manager is
+    // unaware — started directly, or pm2's daemon is unreachable (EPERM on its
+    // control pipe). Confirm with /healthz before reporting it down, so we don't
+    // tell the user to (re)start a proxy that is already serving.
+    const liveness = await checkHttp(port);
+    if (liveness.ok) {
+      return createResult({
+        tierId: meta.id,
+        tierName: meta.name,
+        severity: Severity.WARN,
+        evidence: [
+          {
+            check: "cliproxy-liveness",
+            actual: `Proxy is answering on :${port} but ${config.cliproxy.hosting} is not tracking it`,
+            remediation: `Proxy is usable as-is; re-attach it to ${config.cliproxy.hosting} when convenient`,
+          },
+        ],
+        durationMs: performance.now() - start,
+      });
+    }
     return createResult({
       tierId: meta.id,
       tierName: meta.name,
@@ -149,10 +206,26 @@ export async function check(config, context) {
     });
   }
 
-  const accounts = httpResult.body?.accounts ?? [];
-  const hasAccounts = Array.isArray(accounts) && accounts.length > 0;
+  let accountCount;
+  try {
+    accountCount = await countCliproxyAccounts();
+  } catch (err) {
+    return createResult({
+      tierId: meta.id,
+      tierName: meta.name,
+      severity: Severity.BLOCK,
+      evidence: [
+        {
+          check: "cliproxy-accounts",
+          actual: `Failed to enumerate auth-dir: ${err.code ?? err.message}`,
+          remediation: "Check ~/.cli-proxy-api/ permissions and ownership",
+        },
+      ],
+      durationMs: performance.now() - start,
+    });
+  }
 
-  if (!hasAccounts) {
+  if (accountCount === 0) {
     return createResult({
       tierId: meta.id,
       tierName: meta.name,
@@ -160,22 +233,27 @@ export async function check(config, context) {
       evidence: [
         {
           check: "cliproxy-accounts",
-          actual: "No accounts configured",
-          remediation: "Add at least one account to CLIProxy configuration",
+          actual: "0 OAuth credentials in ~/.cli-proxy-api/",
+          remediation: "Add at least one provider account via the CLIProxy login flow",
         },
       ],
       durationMs: performance.now() - start,
     });
   }
 
+  const accountEvidence =
+    accountCount === null
+      ? {
+          check: "cliproxy-accounts",
+          actual: "auth-dir not at ~/.cli-proxy-api/ (non-default path — count unknown)",
+        }
+      : { check: "cliproxy-accounts", actual: `${accountCount} OAuth account(s) configured` };
+
   return createResult({
     tierId: meta.id,
     tierName: meta.name,
     severity: Severity.PASS,
-    evidence: [
-      processResult.evidence,
-      { check: "cliproxy-accounts", actual: `${accounts.length} account(s) configured` },
-    ],
+    evidence: [processResult.evidence, httpResult.evidence, accountEvidence],
     durationMs: performance.now() - start,
   });
 }

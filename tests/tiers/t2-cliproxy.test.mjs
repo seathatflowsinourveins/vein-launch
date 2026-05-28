@@ -5,7 +5,12 @@ vi.mock("../../src/lib/shell.mjs", () => ({
   exec: vi.fn(),
 }));
 
+vi.mock("node:fs/promises", () => ({
+  readdir: vi.fn(),
+}));
+
 const { exec } = await import("../../src/lib/shell.mjs");
+const { readdir } = await import("node:fs/promises");
 const { check, repair, meta } = await import("../../src/tiers/t2-cliproxy.mjs");
 
 describe("t2-cliproxy", () => {
@@ -63,7 +68,7 @@ describe("t2-cliproxy", () => {
       expect(exec).toHaveBeenCalledWith("pm2 describe cliproxy");
     });
 
-    it("WARNs when PM2 process is not running", async () => {
+    it("WARNs when PM2 process is not running and /healthz is unreachable", async () => {
       exec.mockResolvedValueOnce({
         ok: false,
         stdout: "status      | stopped",
@@ -71,11 +76,39 @@ describe("t2-cliproxy", () => {
         exitCode: 1,
         timedOut: false,
       });
+      fetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
       const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "fast" });
 
       expect(result.severity).toBe(Severity.WARN);
       expect(result.evidence[0].remediation).toBeTruthy();
+      expect(result.evidence.some((e) => e.check === "cliproxy-liveness")).toBe(false);
+    });
+
+    it("reports the proxy live (not a flat down) when PM2 is unaware but /healthz responds", async () => {
+      // pm2 has no record of the proxy (direct-launched, or pm2 daemon EPERM on its pipe)
+      exec.mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: "connect EPERM rpc.sock unreachable",
+        exitCode: 1,
+        timedOut: false,
+      });
+      // ...but the proxy itself is answering on :8317
+      fetch.mockResolvedValueOnce({ ok: true, json: vi.fn().mockResolvedValue({ status: "ok" }) });
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "fast" });
+
+      expect(result.severity).toBe(Severity.WARN);
+      expect(fetch).toHaveBeenCalledWith(
+        "http://localhost:8317/healthz",
+        expect.objectContaining({ signal: expect.any(Object) }),
+      );
+      const liveness = result.evidence.find((e) => e.check === "cliproxy-liveness");
+      expect(liveness).toBeTruthy();
+      expect(liveness.actual).toContain("answering on :8317");
+      // must NOT tell the user to start a proxy that is already serving
+      expect(result.evidence.some((e) => /pm2 start/i.test(e.remediation ?? ""))).toBe(false);
     });
   });
 
@@ -97,7 +130,7 @@ describe("t2-cliproxy", () => {
       );
     });
 
-    it("WARNs when Docker container is stopped", async () => {
+    it("WARNs when Docker container is stopped and /healthz is unreachable", async () => {
       exec.mockResolvedValueOnce({
         ok: false,
         stdout: '{"State":"exited","Name":"cliproxy"}',
@@ -105,6 +138,7 @@ describe("t2-cliproxy", () => {
         exitCode: 1,
         timedOut: false,
       });
+      fetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
       const result = await check({ cliproxy: { hosting: "docker", port: 8317 } }, { mode: "fast" });
 
@@ -114,7 +148,7 @@ describe("t2-cliproxy", () => {
   });
 
   describe("check — deep mode HTTP health", () => {
-    it("PASSes when health endpoint returns ok with accounts", async () => {
+    it("PASSes when daemon is healthy and auth-dir has OAuth credentials", async () => {
       exec.mockResolvedValueOnce({
         ok: true,
         stdout: "status      | online",
@@ -123,8 +157,13 @@ describe("t2-cliproxy", () => {
         timedOut: false,
       });
 
-      const mockJson = vi.fn().mockResolvedValue({ status: "ok", accounts: ["acct1", "acct2"] });
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
       fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      readdir.mockResolvedValueOnce([
+        { name: "claude-a@example.com.json", isFile: () => true },
+        { name: "claude-b@example.com.json", isFile: () => true },
+        { name: "codex-c@example.com.json", isFile: () => true },
+      ]);
 
       const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
 
@@ -133,6 +172,79 @@ describe("t2-cliproxy", () => {
         "http://localhost:8317/healthz",
         expect.objectContaining({ signal: expect.any(Object) }),
       );
+      expect(result.evidence.find((e) => e.check === "cliproxy-accounts").actual).toContain(
+        "3 OAuth account(s)",
+      );
+    });
+
+    it("ignores non-file entries and non-credential filenames", async () => {
+      exec.mockResolvedValueOnce({
+        ok: true,
+        stdout: "status      | online",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
+      fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      readdir.mockResolvedValueOnce([
+        { name: "claude-a@example.com.json", isFile: () => true },
+        { name: "logs", isFile: () => false }, // directory — should not count
+        { name: "README.md", isFile: () => true }, // not a credential — should not count
+        { name: "codex-b@example.com.json", isFile: () => true },
+      ]);
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
+
+      expect(result.severity).toBe(Severity.PASS);
+      expect(result.evidence.find((e) => e.check === "cliproxy-accounts").actual).toContain(
+        "2 OAuth account(s)",
+      );
+    });
+
+    it("PASSes with informational evidence when auth-dir is missing (ENOENT)", async () => {
+      exec.mockResolvedValueOnce({
+        ok: true,
+        stdout: "status      | online",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
+      fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      const enoent = Object.assign(new Error("ENOENT: auth-dir missing"), { code: "ENOENT" });
+      readdir.mockRejectedValueOnce(enoent);
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
+
+      expect(result.severity).toBe(Severity.PASS);
+      expect(result.evidence.find((e) => e.check === "cliproxy-accounts").actual).toContain(
+        "non-default path",
+      );
+    });
+
+    it("BLOCKs when auth-dir readdir fails with non-ENOENT (e.g. EACCES)", async () => {
+      exec.mockResolvedValueOnce({
+        ok: true,
+        stdout: "status      | online",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
+      fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      const eacces = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      readdir.mockRejectedValueOnce(eacces);
+
+      const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
+
+      expect(result.severity).toBe(Severity.BLOCK);
+      const e = result.evidence.find((ev) => ev.check === "cliproxy-accounts");
+      expect(e.actual).toContain("EACCES");
+      expect(e.remediation).toBeTruthy();
     });
 
     it("BLOCKs when health endpoint is unreachable (fetch throws)", async () => {
@@ -188,7 +300,7 @@ describe("t2-cliproxy", () => {
       expect(result.evidence[0].remediation).toBeTruthy();
     });
 
-    it("WARNs when no accounts configured in health response", async () => {
+    it("WARNs when daemon is healthy but auth-dir is empty (0 OAuth credentials)", async () => {
       exec.mockResolvedValueOnce({
         ok: true,
         stdout: "status      | online",
@@ -197,8 +309,9 @@ describe("t2-cliproxy", () => {
         timedOut: false,
       });
 
-      const mockJson = vi.fn().mockResolvedValue({ status: "ok", accounts: [] });
+      const mockJson = vi.fn().mockResolvedValue({ status: "ok" });
       fetch.mockResolvedValueOnce({ ok: true, json: mockJson });
+      readdir.mockResolvedValueOnce([]);
 
       const result = await check({ cliproxy: { hosting: "pm2", port: 8317 } }, { mode: "deep" });
 

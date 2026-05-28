@@ -2,7 +2,7 @@
  * Claude launcher — builds env vars and spawns claude process.
  */
 
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -117,12 +117,28 @@ export async function buildLaunchArgsAsync(config, passThrough, opts = {}) {
 export async function launchClaude(config, passThrough) {
   const env = { ...process.env, ...buildLaunchEnv(config) };
   const args = await buildLaunchArgsAsync(config, passThrough);
-  const command = ["claude", ...args].join(" ");
+  const bin = process.platform === "win32" ? "claude.exe" : "claude";
 
-  execSync(command, {
+  const result = spawnSync(bin, args, {
     cwd: config.projectDir,
     env,
     stdio: "inherit",
+    shell: false,
     windowsHide: false,
   });
+
+  if (result.error) throw result.error;
+  if (result.signal) {
+    const err = new Error(`claude terminated by signal ${result.signal}`);
+    err.code = result.signal;
+    throw err;
+  }
+  if (typeof result.status !== "number") {
+    throw new Error(`claude returned no exit status (signal=${result.signal ?? "none"})`);
+  }
+  if (result.status !== 0) {
+    const err = new Error(`claude exited with status ${result.status}`);
+    err.code = result.status;
+    throw err;
+  }
 }

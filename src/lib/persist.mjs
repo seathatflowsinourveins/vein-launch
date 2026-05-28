@@ -3,6 +3,7 @@
  * Implements 12-Factor Agent F5: "Unify execution state and business state."
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -29,7 +30,9 @@ export async function persistResults(config, runResult) {
     })),
   };
 
-  const filename = `${entry.timestamp.replace(/[:.]/g, "-")}_${entry.project}_${entry.mode}.json`;
+  // Short random suffix prevents two runs in the same millisecond from
+  // producing the same filename and silently overwriting each other's history.
+  const filename = `${entry.timestamp.replace(/[:.]/g, "-")}_${entry.project}_${entry.mode}_${randomUUID().slice(0, 8)}.json`;
   await writeFile(join(STATE_DIR, filename), JSON.stringify(entry, null, 2));
   return entry;
 }
@@ -46,8 +49,12 @@ export async function getRecentRuns(project, limit = 10) {
 
   const runs = [];
   for (const f of matching) {
-    const data = JSON.parse(await readFile(join(STATE_DIR, f), "utf-8"));
-    runs.push(data);
+    try {
+      runs.push(JSON.parse(await readFile(join(STATE_DIR, f), "utf-8")));
+    } catch (err) {
+      // One corrupt run file must not break trend analysis for all runs.
+      process.stderr.write(`[vein] WARN: skipping unreadable run file ${f}: ${err.message}\n`);
+    }
   }
   return runs;
 }

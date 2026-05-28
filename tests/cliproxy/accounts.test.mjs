@@ -5,6 +5,7 @@ vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
+  renameSync: vi.fn(),
 }));
 
 vi.mock("node:os", () => ({
@@ -55,6 +56,17 @@ describe("accounts", () => {
 
       expect(result).toEqual(accounts);
       expect(readFileSync).toHaveBeenCalledWith(MOCK_ACCOUNTS_PATH, "utf8");
+    });
+
+    it("returns empty array (does not crash) when accounts file is corrupt", () => {
+      existsSync.mockReturnValue(true);
+      readFileSync.mockReturnValue("{ not valid json ");
+      const errSpy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+      const result = listAccounts();
+
+      expect(result).toEqual([]);
+      errSpy.mockRestore();
     });
   });
 

@@ -3,15 +3,29 @@ name: Dependency Review
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
   dependency-review:
+    # Uses `npm audit` instead of actions/dependency-review-action because
+    # the latter requires Dependency Graph + GitHub Advanced Security on
+    # private repos. `npm audit` works on any repo, no admin config needed,
+    # and checks the same npm advisory database. Socket Security (separate
+    # workflow) provides orthogonal CVE coverage as a second layer.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/dependency-review-action@da24556b548a50705dd671f47852072ea4c105d9 # v4.7.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          fail-on-severity: high
+          node-version: "24"
+      - run: npm ci
+      - name: npm audit (production deps, high+ blocks merge)
+        # Scope to production deps via --omit=dev so dev-only CVEs (currently
+        # protobufjs/uuid transitive through deepeval, no upstream fix yet)
+        # don't block PRs. The dev-dep CVEs are tracked in the audit backlog.
+        # Production deps are the real attack surface for downstream users.
+        run: npm audit --audit-level=high --omit=dev

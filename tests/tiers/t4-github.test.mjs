@@ -208,5 +208,20 @@ describe("t4-github", () => {
       expect(calls.some((c) => c.includes("gpg.format ssh"))).toBe(true);
       expect(result.tierId).toBe("t4-github");
     });
+
+    // --- Test 13: repair fails closed when gh auth refresh fails ---
+    it("repair BLOCKs (fail-closed) when gh auth refresh fails", async () => {
+      exec.mockResolvedValueOnce(fail("HTTP 401: Bad credentials")); // gh auth refresh fails
+
+      const result = await repair({}, {});
+
+      expect(result.severity).toBe(Severity.BLOCK);
+      const e = result.evidence.find((ev) => ev.check === "gh-auth-refresh");
+      expect(e).toBeDefined();
+      expect(e.actual).toContain("gh auth refresh failed");
+      expect(e.remediation).toContain("gh auth login");
+      // must short-circuit before the SSH signing checks
+      expect(exec).toHaveBeenCalledTimes(1);
+    });
   });
 });
