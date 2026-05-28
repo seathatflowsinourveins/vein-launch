@@ -134,16 +134,11 @@ describe("runFirstTimeSetup — fresh install (no install.json)", () => {
     }
   });
 
-  it("calls symlink for vein.ps1", async () => {
+  it("runs npm-link step (SOTA CLI distribution via npm link)", async () => {
+    const { exec } = await import("../../src/lib/shell.mjs");
     await runFirstTimeSetup({ repoRoot: "/repo" });
-    const symlinkPaths = fsp.symlink.mock.calls.map((c) => c[1]);
-    expect(symlinkPaths.some((p) => String(p).includes("vein.ps1"))).toBe(true);
-  });
-
-  it("calls symlink for vein.cmd", async () => {
-    await runFirstTimeSetup({ repoRoot: "/repo" });
-    const symlinkPaths = fsp.symlink.mock.calls.map((c) => c[1]);
-    expect(symlinkPaths.some((p) => String(p).includes("vein.cmd"))).toBe(true);
+    const linkCall = exec.mock.calls.find((c) => String(c[0]).includes("npm link"));
+    expect(linkCall).toBeDefined();
   });
 
   it("writes install.json via writeFile", async () => {
@@ -185,9 +180,9 @@ describe("runFirstTimeSetup — fresh install (no install.json)", () => {
   it("reports each setup step in results", async () => {
     const { results } = await runFirstTimeSetup({ repoRoot: "/repo" });
     const names = results.map((r) => r.name);
-    // At minimum: dirs, symlinks, install-json, cliproxy-key
+    // At minimum: dirs, npm-link, install-json, cliproxy-key
     expect(names).toContain("create-dirs");
-    expect(names).toContain("symlinks");
+    expect(names).toContain("npm-link");
     expect(names).toContain("install-json");
     expect(names).toContain("cliproxy-key");
   });
@@ -200,7 +195,7 @@ describe("runFirstTimeSetup — idempotence (install.json already exists)", () =
       if (String(p).includes("install.json")) {
         return Promise.resolve(
           makeInstallJson({
-            setupSteps: ["create-dirs", "symlinks", "install-json", "cliproxy-key"],
+            setupSteps: ["create-dirs", "npm-link", "install-json", "cliproxy-key"],
           }),
         );
       }

@@ -6,8 +6,8 @@
  *
  * Steps (each is try/caught individually; idempotent):
  *   1. create-dirs    — ~/.vein/{runs,eval-history,sessions,hud}
- *   2. symlinks       — ~/bin/vein.ps1 → <repoRoot>/bin/vein.ps1 (+ vein.cmd)
- *   3. path-env       — add ~/bin to User PATH (PowerShell env call)
+ *   2. npm-link       — `npm link` registers the "vein" CLI globally via npm's own bin dir
+ *                       (no ~/bin copies, no symlinks, no PATH modification needed)
  *   4. vein-root-env  — set VEIN_LAUNCH_ROOT in User env
  *   5. cliproxy-key   — generate sk-ant-vein-<hex> → ~/cliproxy/config.yaml + ANTHROPIC_API_KEY
  *   6. install-json   — write ~/.vein/install.json
@@ -17,7 +17,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { exec } from "../lib/shell.mjs";
@@ -28,8 +28,7 @@ export const SETUP_DIRS = ["runs", "eval-history", "sessions", "hud"];
 /** Ordered list of step names (used for idempotency checks in install.json) */
 export const SETUP_STEPS = [
   "create-dirs",
-  "symlinks",
-  "path-env",
+  "npm-link",
   "vein-root-env",
   "cliproxy-key",
   "install-json",
@@ -80,84 +79,24 @@ async function stepCreateDirs(veinDir) {
 }
 
 /**
- * Step: symlink ~/bin/vein.ps1 → <repoRoot>/bin/vein.ps1 (and vein.cmd).
- * Uses junction fallback on Windows when regular symlink is rejected.
+ * Step: `npm link` in the repo root registers the "vein" CLI globally.
  *
- * @param {string} binDir - ~/bin
+ * This is the SOTA Node.js CLI distribution pattern:
+ * - package.json "bin" field declares the entry point
+ * - npm creates a shim in its global bin dir (%APPDATA%\npm on Windows)
+ * - That dir is already on PATH from the Node.js installation
+ * - No ~/bin/, no manual symlinks, no PATH modification, no admin privileges
+ * - Re-running is idempotent (npm link overwrites the existing shim)
+ *
  * @param {string} repoRoot
  * @returns {Promise<{ok: boolean, message: string}>}
  */
-async function stepSymlinks(binDir, repoRoot) {
-  await mkdir(binDir, { recursive: true });
-  const links = ["vein.ps1", "vein.cmd"];
-  const created = [];
-  for (const name of links) {
-    const target = join(repoRoot, "bin", name);
-    const linkPath = join(binDir, name);
-    // Check if symlink already points to correct target
-    try {
-      const existing = await readlink(linkPath);
-      if (existing === target) {
-        created.push(`${name} (already linked)`);
-        continue;
-      }
-    } catch {
-      // Does not exist yet — create it
-    }
-    try {
-      await symlink(target, linkPath);
-      created.push(name);
-    } catch (err) {
-      if (process.platform === "win32" && err.code === "EPERM") {
-        // Junction fallback for non-elevated Windows sessions
-        await symlink(target, linkPath, "junction");
-        created.push(`${name} (junction)`);
-      } else {
-        throw err;
-      }
-    }
+async function stepNpmLink(repoRoot) {
+  const result = await exec("npm link --ignore-scripts", { cwd: repoRoot, timeout: 30_000 });
+  if (!result.ok) {
+    return { ok: false, message: `npm link failed: ${result.stderr}` };
   }
-  return { ok: true, message: `Symlinked: ${created.join(", ")}` };
-}
-
-/**
- * Step: add ~/bin to User PATH via PowerShell (Windows) or shell profile (POSIX).
- *
- * @param {string} binDir
- * @returns {Promise<{ok: boolean, message: string}>}
- */
-async function stepPathEnv(binDir) {
-  // Check if binDir is already on PATH
-  const currentPath = process.env.PATH ?? "";
-  if (currentPath.split(/[;:]/).includes(binDir)) {
-    return { ok: true, message: `${binDir} already in PATH` };
-  }
-
-  if (process.platform === "win32") {
-    const result = await exec(
-      `powershell -NonInteractive -Command ` +
-        `"$p=[Environment]::GetEnvironmentVariable('PATH','User'); ` +
-        `if($p -notlike '*${binDir}*'){ [Environment]::SetEnvironmentVariable('PATH',$p+';${binDir}','User') }"`,
-      { shellMode: true, timeout: 10_000 },
-    );
-    return {
-      ok: result.ok,
-      message: result.ok ? `Added ${binDir} to User PATH` : result.stderr,
-    };
-  }
-
-  // POSIX: append to ~/.profile if not present
-  const profilePath = join(homedir(), ".profile");
-  const line = `\nexport PATH="${binDir}:$PATH"\n`;
-  try {
-    const existing = await readFile(profilePath, "utf8").catch(() => "");
-    if (!existing.includes(binDir)) {
-      await writeFile(profilePath, existing + line, "utf8");
-    }
-    return { ok: true, message: `Added ${binDir} to PATH via ~/.profile` };
-  } catch (err) {
-    return { ok: false, message: `Could not update ~/.profile: ${err.message}` };
-  }
+  return { ok: true, message: "npm link → vein CLI registered globally" };
 }
 
 /**
@@ -298,7 +237,6 @@ export async function runFirstTimeSetup(options = {}) {
 
   const home = homedir();
   const veinDir = join(home, ".vein");
-  const binDir = join(home, "bin");
 
   if (dryRun) {
     const results = SETUP_STEPS.map((name) => ({
@@ -339,8 +277,7 @@ export async function runFirstTimeSetup(options = {}) {
   }
 
   await runStep("create-dirs", () => stepCreateDirs(veinDir));
-  await runStep("symlinks", () => stepSymlinks(binDir, repoRoot));
-  await runStep("path-env", () => stepPathEnv(binDir));
+  await runStep("npm-link", () => stepNpmLink(repoRoot));
   await runStep("vein-root-env", () => stepVeinRootEnv(repoRoot));
   await runStep("cliproxy-key", () => stepCliproxyKey(home));
 

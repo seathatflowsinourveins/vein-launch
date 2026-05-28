@@ -12,7 +12,44 @@ import { persistResults } from "./lib/persist.mjs";
 import { report } from "./lib/reporter.mjs";
 import { ExitCodes, Severity, worstSeverity } from "./lib/result.mjs";
 import { runTiers } from "./lib/runner.mjs";
+import { cleanSessions, createSession, listSessions } from "./lib/sessions.mjs";
 import { OPERABLE_SEVERITIES } from "./lib/unleash-gate.mjs";
+
+/**
+ * Print active session status to stdout.
+ * Used by `vein --status` to surface parallel sessions.
+ */
+async function printStatus() {
+  let sessions;
+  try {
+    sessions = await listSessions();
+  } catch {
+    sessions = [];
+  }
+
+  if (sessions.length === 0) {
+    console.log("[vein] No active sessions.");
+    return;
+  }
+
+  console.log(`\nActive sessions (${sessions.length}):`);
+  const now = Date.now();
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    const ageMs = now - new Date(s.startedAt).getTime();
+    const ageSec = Math.floor(ageMs / 1000);
+    const ageLabel =
+      ageSec < 60
+        ? `${ageSec}s ago`
+        : ageSec < 3600
+          ? `${Math.floor(ageSec / 60)}m ago`
+          : `${Math.floor(ageSec / 3600)}h ago`;
+    console.log(
+      `  #${i + 1}  ${s.project.padEnd(20)}  pid:${s.pid}  ${s.mode.padEnd(8)}  ${ageLabel}`,
+    );
+  }
+  console.log("");
+}
 
 export async function orchestrate(args) {
   // --eval-mode: emit machine-readable JSON tier results to stdout, then exit.
@@ -72,7 +109,27 @@ export async function orchestrate(args) {
   // Command-mode requests (--status, --setup, --projects, --accounts) are
   // informational only — no tier execution needed.
   if (config.args?.command) {
+    if (config.args.command === "status") {
+      await printStatus();
+    }
     return ExitCodes.SUCCESS;
+  }
+
+  // Clean stale session entries, then register this launch.
+  try {
+    await cleanSessions();
+  } catch {
+    // Non-blocking: stale-session cleanup failure must not abort launch
+  }
+
+  let session;
+  try {
+    session = await createSession({
+      project: config.args?.project ?? "unknown",
+      mode: config.mode,
+    });
+  } catch {
+    // Non-blocking: session registration failure must not abort launch
   }
 
   const runResult = await runTiers(config);
@@ -103,7 +160,14 @@ export async function orchestrate(args) {
     // so bypass mode never activated and CLIProxy routing was always skipped.
     const cliproxyActive =
       t2Result != null && OPERABLE_SEVERITIES.has(String(t2Result.severity ?? "").toLowerCase());
-    const launchConfig = { ...config, _cliproxyActive: cliproxyActive };
+    // Bind this session's UUID to the CLIProxy session-affinity header (VEIN_SESSION_ID).
+    // buildLaunchEnv reads config.metadata.user_id and exposes it as an env var.
+    const sessionId = session?.id ?? null;
+    const launchConfig = {
+      ...config,
+      _cliproxyActive: cliproxyActive,
+      metadata: { ...config.metadata, user_id: sessionId },
+    };
     try {
       await launchClaude(launchConfig, config.args?.passThrough ?? []);
     } catch (err) {
