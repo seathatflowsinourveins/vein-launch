@@ -9,6 +9,9 @@
  * curated allow-list in .claude/settings.json.
  */
 
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 /**
  * Allow-list of severities that count as operable for the bypass auto-gate
  * and for the _cliproxyActive flag in the orchestrator.
@@ -23,9 +26,6 @@
  * BLOCK | ERROR → not operable).
  */
 export const OPERABLE_SEVERITIES = new Set(["pass", "info", "warn", "skip"]);
-
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 /**
  * @param {{

@@ -28,8 +28,9 @@ export async function status() {
   let services;
   try {
     services = JSON.parse(result.stdout);
-  } catch {
-    return { running: false, details: "docker not available or compose file missing" };
+  } catch (err) {
+    // Distinguish parse failure from "docker not available" so debugging is precise.
+    return { running: false, details: `docker compose returned non-JSON output: ${err.message}` };
   }
 
   if (!Array.isArray(services) || services.length === 0) {
@@ -83,10 +84,12 @@ export async function restart() {
 
 /**
  * Fetches recent log lines from the cliproxy container.
- * @param {number} [lines=50] - Number of tail lines to return.
+ * @param {number} [lines=50] - Number of tail lines (clamped to 1..10000).
  * @returns {Promise<LogsResult>}
  */
 export async function logs(lines = 50) {
-  const result = await exec(`${COMPOSE_CMD} logs --tail ${lines}`);
+  const n = Number(lines);
+  const safe = Number.isInteger(n) && n >= 1 && n <= 10000 ? n : 50;
+  const result = await exec(`${COMPOSE_CMD} logs --tail ${safe}`);
   return { stdout: result.stdout, stderr: result.stderr };
 }

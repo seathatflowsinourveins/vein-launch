@@ -51,7 +51,7 @@ describe("docker provider", () => {
       const result = await status();
 
       expect(result.running).toBe(false);
-      expect(result.details).toBe("docker not available or compose file missing");
+      expect(result.details).toMatch(/docker compose returned non-JSON output/);
     });
 
     it("returns running:false when services array is empty", async () => {

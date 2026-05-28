@@ -5,6 +5,7 @@
 
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import Ajv from "ajv";
 
@@ -138,7 +139,8 @@ export function parseArgs(args) {
 
 export function resolveProject(name) {
   if (!name) return process.cwd();
-  const candidates = [resolve(`C:/SEA/src/${name}`), resolve(process.cwd(), name)];
+  const projectsRoot = process.env.VEIN_PROJECTS_ROOT ?? join(homedir(), "SEA", "src");
+  const candidates = [resolve(projectsRoot, name), resolve(process.cwd(), name)];
   for (const dir of candidates) {
     if (existsSync(dir)) return dir;
   }

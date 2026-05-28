@@ -178,11 +178,22 @@ async function stepCliproxyKey(home) {
   if (process.platform === "win32") {
     // Value passed via the process env (read as $env:... in PowerShell), never
     // interpolated into the command string — no injection via the key value.
-    await exec(
+    const envResult = await exec(
       `powershell -NonInteractive -Command ` +
         `"[Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY', $env:VEIN_SETUP_VALUE, 'User')"`,
       { shellMode: true, timeout: 10_000, env: { ...process.env, VEIN_SETUP_VALUE: key } },
     );
+    // Don't silently succeed when persistence fails — the user thinks the key
+    // was saved, then claude fails auth on next launch with no clear cause.
+    if (!envResult.ok) {
+      const reason =
+        envResult.stderr ||
+        `exit code ${envResult.exitCode}` + (envResult.timedOut ? " (timed out)" : "");
+      return {
+        ok: false,
+        message: `CLIProxy key written to config.yaml but PowerShell persistence to User env failed: ${reason}`,
+      };
+    }
   }
 
   return { ok: true, message: `CLIProxy key generated: ${key.slice(0, 20)}...` };

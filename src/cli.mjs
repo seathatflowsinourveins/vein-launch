@@ -12,6 +12,17 @@
 import { ExitCodes } from "./lib/result.mjs";
 import { orchestrate } from "./orchestrator.mjs";
 
+// Suppress Node DEP0190 — child_process shell:true + array args warning.
+// We intentionally use shell:true ONLY for Windows .cmd/.bat shims (pm2, gh, codex)
+// in src/lib/shell.mjs, where Node REQUIRES it per CVE-2024-27980 (BatBadBut). Args
+// are passed as arrays (not concatenated into a shell string), so the security
+// concern DEP0190 raises doesn't apply here. The warning is otherwise noisy.
+const __origEmit = process.emit;
+process.emit = function (name, data) {
+  if (name === "warning" && data?.code === "DEP0190") return false;
+  return __origEmit.apply(process, arguments);
+};
+
 const args = process.argv.slice(2);
 
 if (args.includes("--manifest")) {
