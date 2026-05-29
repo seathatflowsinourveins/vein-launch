@@ -18,9 +18,9 @@ import { orchestrate } from "./orchestrator.mjs";
 // are passed as arrays (not concatenated into a shell string), so the security
 // concern DEP0190 raises doesn't apply here. The warning is otherwise noisy.
 const __origEmit = process.emit;
-process.emit = function (name, data) {
-  if (name === "warning" && data?.code === "DEP0190") return false;
-  return __origEmit.apply(process, arguments);
+process.emit = (name, ...args) => {
+  if (name === "warning" && args[0]?.code === "DEP0190") return false;
+  return __origEmit.call(process, name, ...args);
 };
 
 const args = process.argv.slice(2);

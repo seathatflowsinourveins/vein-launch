@@ -3,7 +3,9 @@
   "mode": { "default": "fast" },
   "cliproxy": {
     "hosting": "pm2",
-    "port": 8317
+    "port": 8317,
+    "binaryPath": "C:/Users/seath/cliproxy/cli-proxy-api.exe",
+    "cwd": "C:/Users/seath/cliproxy"
   },
   "modelRouting": {
     "default": "opus",

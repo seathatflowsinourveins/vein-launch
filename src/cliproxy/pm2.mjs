@@ -45,11 +45,24 @@ export async function status() {
 
 /**
  * Starts cliproxy via PM2 using the given binary path.
+ *
+ * `--interpreter none` makes PM2 run the native cli-proxy-api binary directly
+ * instead of trying to execute it through Node. `cwd` points the proxy at its
+ * config: cli-proxy-api reads ./config.yaml relative to its working directory.
+ *
+ * We deliberately do NOT pass the config via a post-`--` `-config <path>`:
+ * PM2's CLI mis-parses single-dash args (`-config` is read as its own `-c`/cron
+ * flag), and a PowerShell launch swallows the `--` separator before PM2 sees it.
+ * Setting --cwd is the robust, shell-agnostic equivalent.
+ *
  * @param {string} binaryPath
+ * @param {{ cwd?: string }} [options]
  * @returns {Promise<ActionResult>}
  */
-export async function start(binaryPath) {
-  const result = await execArgs("pm2", ["start", binaryPath, "--name", PROCESS_NAME]);
+export async function start(binaryPath, { cwd } = {}) {
+  const args = ["start", binaryPath, "--name", PROCESS_NAME, "--interpreter", "none"];
+  if (cwd) args.push("--cwd", cwd);
+  const result = await execArgs("pm2", args);
   return { ok: result.ok, message: result.ok ? "started" : result.stderr };
 }
 

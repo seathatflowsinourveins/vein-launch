@@ -22,7 +22,12 @@ const { getStatus, startProxy, stopProxy, restartProxy, getProxyLogs, ensureRunn
   await import("../../src/cliproxy/manager.mjs");
 
 const pm2Config = {
-  cliproxy: { hosting: "pm2", port: 8317, binaryPath: "/path/to/cli-proxy-api" },
+  cliproxy: {
+    hosting: "pm2",
+    port: 8317,
+    binaryPath: "/path/to/cli-proxy-api",
+    cwd: "/path/to",
+  },
 };
 const dockerConfig = { cliproxy: { hosting: "docker", port: 8317 } };
 const noConfig = {};
@@ -66,7 +71,9 @@ describe("startProxy", () => {
   it("delegates to pm2.start with binaryPath from config", async () => {
     pm2.start.mockResolvedValue({ ok: true, message: "started" });
     const result = await startProxy(pm2Config);
-    expect(pm2.start).toHaveBeenCalledWith("/path/to/cli-proxy-api");
+    expect(pm2.start).toHaveBeenCalledWith("/path/to/cli-proxy-api", {
+      cwd: "/path/to",
+    });
     expect(result.ok).toBe(true);
   });
 
@@ -74,7 +81,9 @@ describe("startProxy", () => {
     pm2.start.mockResolvedValue({ ok: true, message: "started" });
     const configNoBinary = { cliproxy: { hosting: "pm2", port: 8317 } };
     await startProxy(configNoBinary);
-    expect(pm2.start).toHaveBeenCalledWith("cli-proxy-api");
+    expect(pm2.start).toHaveBeenCalledWith("cli-proxy-api", {
+      cwd: undefined,
+    });
   });
 
   it("delegates to docker.start with no binaryPath argument", async () => {
