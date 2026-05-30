@@ -29,7 +29,8 @@ const KEY = process.env.MANAGEMENT_PASSWORD ?? "";
 const args = process.argv.slice(2);
 const ONCE = args.includes("--once");
 const iIdx = args.indexOf("--interval");
-const INTERVAL = Math.max(1, Number(iIdx >= 0 ? args[iIdx + 1] : 3)) * 1000;
+const rawInterval = iIdx >= 0 ? Number(args[iIdx + 1]) : 3;
+const INTERVAL = (Number.isFinite(rawInterval) && rawInterval >= 1 ? rawInterval : 3) * 1000;
 
 /** GET JSON, trying each host in turn (handles a per-IP lockout on one stack). */
 function get(path, i = 0) {
@@ -137,7 +138,10 @@ async function tick() {
 
   const online = files.filter(
     (a) =>
-      a.disabled !== true && a.unavailable !== true && (a.status == null || a.status === "active"),
+      a.enabled !== false &&
+      a.disabled !== true &&
+      a.unavailable !== true &&
+      (a.status == null || a.status === "active"),
   ).length;
   const uptime = ((Date.now() - started) / 1000).toFixed(0);
 

@@ -296,8 +296,14 @@ export async function poll({ config, fetcher = null, readdirFn = null, outputPat
   let prev = null;
   try {
     prev = JSON.parse(await readFile(outputPath, "utf8"));
-  } catch {
-    // No prior file (first run) or unreadable — fine.
+  } catch (err) {
+    // Best-effort carry-forward: a missing prior file is normal (first run); for a
+    // corrupt/unreadable one, log (don't throw) so the HUD still updates this cycle.
+    if (err?.code !== "ENOENT") {
+      process.stderr.write(
+        `hud-bridge: prior output unreadable at ${outputPath} (${err?.message ?? err}); continuing\n`,
+      );
+    }
   }
 
   const fiveHour = quota.five.reset
@@ -356,9 +362,10 @@ async function main() {
 // Run when executed directly (`node tools/hud-bridge.mjs`) or under PM2.
 // PM2's ESM loader sets process.argv[1] to its own wrapper (not this file),
 // so the path heuristic alone fails there. HUD_BRIDGE_MAIN (set in the PM2
-// config) and PM2's own `pm_id` env marker make the intent explicit. Tests
-// import this module with none of these set, so main() never starts.
-const launchedByPm2 = process.env.HUD_BRIDGE_MAIN === "1" || process.env.pm_id != null;
+// config) makes the intent explicit — we deliberately do NOT key off PM2's
+// `pm_id`, so an unrelated PM2-managed process importing this module can't
+// auto-start main(). Tests import with none of these set, so main() never starts.
+const launchedByPm2 = process.env.HUD_BRIDGE_MAIN === "1";
 const isMain =
   launchedByPm2 ||
   (process.argv[1] != null &&

@@ -67,7 +67,14 @@ async function nodeProbe(port) {
   });
 }
 
+// Port is interpolated into a shell pipeline; restrict to digits so a crafted
+// `target` cannot inject shell syntax (parity with SAFE_PATTERN for proc mode).
+const SAFE_PORT = /^\d{1,5}$/;
+
 function checkPort(port) {
+  if (!SAFE_PORT.test(String(port))) {
+    throw new Error(`unsafe port: ${JSON.stringify(port)} (allowed: 1-5 digits)`);
+  }
   const native = run(`netstat -ano | findstr ":${port} "`);
   const posix = run(`netstat -ano | grep ":${port} "`);
   return { native, posix };

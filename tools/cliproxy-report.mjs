@@ -22,7 +22,7 @@ const PORT = Number(process.env.CLIPROXY_PORT ?? 8317);
 const KEY = process.env.MANAGEMENT_PASSWORD ?? "";
 const OUT = join(homedir(), ".vein", "hud", "cliproxy-report.html");
 const LOG = join(homedir(), ".cli-proxy-api", "logs", "main.log");
-const TODAY = "2026-05-28"; // log's active day for hourly chart
+const TODAY = new Date().toISOString().slice(0, 10); // current day (YYYY-MM-DD UTC) for hourly chart
 
 function get(path, hosts = ["127.0.0.1", "::1"], i = 0) {
   if (i >= hosts.length) return Promise.resolve(null);
@@ -173,10 +173,15 @@ async function main() {
         const n = Number(ep);
         return Number.isFinite(n) ? new Date(n > 1e12 ? n : n * 1000) : null;
       };
+      // Guard against non-numeric headers so NaN never reaches the gauges/subtitle.
+      const pct = (v) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n * 100 : 0;
+      };
       liveQ[r.auth_index] = {
-        u5: parseFloat(hv(rh, "Anthropic-Ratelimit-Unified-5h-Utilization")) * 100,
+        u5: pct(hv(rh, "Anthropic-Ratelimit-Unified-5h-Utilization")),
         r5: reset(hv(rh, "Anthropic-Ratelimit-Unified-5h-Reset")),
-        u7: parseFloat(hv(rh, "Anthropic-Ratelimit-Unified-7d-Utilization")) * 100,
+        u7: pct(hv(rh, "Anthropic-Ratelimit-Unified-7d-Utilization")),
       };
     }
   }
@@ -202,8 +207,12 @@ async function main() {
         if (hh) hourly[hh[1]] = (hourly[hh[1]] ?? 0) + 1;
       }
     }
-  } catch {
-    /* log optional */
+  } catch (err) {
+    // Best-effort log parse for the hourly chart: a missing log is normal; for a read
+    // failure, log (don't throw) so the report still renders (without history) this run.
+    if (err?.code !== "ENOENT") {
+      process.stderr.write(`cliproxy-report: log unreadable at ${LOG} (${err?.message ?? err})\n`);
+    }
   }
 
   const emailOf = (f) => f.email || f.name;
