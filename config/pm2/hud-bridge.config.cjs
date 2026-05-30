@@ -27,6 +27,9 @@ module.exports = {
       env: {
         MANAGEMENT_PASSWORD: process.env.MANAGEMENT_PASSWORD || "vein-admin",
         CLIPROXY_PORT: process.env.CLIPROXY_PORT ?? "8317",
+        // Explicit entry-point signal: PM2's ESM loader hides argv[1], so the
+        // script's path-based main() guard can't detect it's the entry module.
+        HUD_BRIDGE_MAIN: "1",
         NODE_ENV: "production",
       },
       // Restart policy

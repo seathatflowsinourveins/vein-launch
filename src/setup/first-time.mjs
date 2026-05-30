@@ -25,6 +25,23 @@ import { exec } from "../lib/shell.mjs";
 /** Directories to create under ~/.vein/ */
 export const SETUP_DIRS = ["runs", "eval-history", "sessions", "hud"];
 
+/**
+ * Format an exec failure into a non-empty, operator-actionable reason string.
+ * Combines stderr + timed-out hint + exit code so no single failure mode
+ * silently surfaces an empty message (e.g., timeout returns stderr="" — the
+ * old `result.stderr` fallback would print nothing).
+ *
+ * @param {{ stderr?: string, exitCode?: number, timedOut?: boolean }} result
+ * @returns {string}
+ */
+function formatExecFailure(result) {
+  const parts = [];
+  if (result.stderr) parts.push(result.stderr);
+  if (result.timedOut) parts.push("(timed out)");
+  if (!parts.length) parts.push(`exit code ${result.exitCode ?? "?"}`);
+  return parts.join(" ");
+}
+
 /** Ordered list of step names (used for idempotency checks in install.json) */
 export const SETUP_STEPS = [
   "create-dirs",
@@ -119,10 +136,10 @@ async function stepVeinRootEnv(repoRoot) {
         `"[Environment]::SetEnvironmentVariable('VEIN_LAUNCH_ROOT', $env:VEIN_SETUP_VALUE, 'User')"`,
       { shellMode: true, timeout: 10_000, env: { ...process.env, VEIN_SETUP_VALUE: repoRoot } },
     );
-    return {
-      ok: result.ok,
-      message: result.ok ? `VEIN_LAUNCH_ROOT set to ${repoRoot}` : result.stderr,
-    };
+    if (!result.ok) {
+      return { ok: false, message: formatExecFailure(result) };
+    }
+    return { ok: true, message: `VEIN_LAUNCH_ROOT set to ${repoRoot}` };
   }
 
   // POSIX
@@ -178,11 +195,19 @@ async function stepCliproxyKey(home) {
   if (process.platform === "win32") {
     // Value passed via the process env (read as $env:... in PowerShell), never
     // interpolated into the command string — no injection via the key value.
-    await exec(
+    const envResult = await exec(
       `powershell -NonInteractive -Command ` +
         `"[Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY', $env:VEIN_SETUP_VALUE, 'User')"`,
       { shellMode: true, timeout: 10_000, env: { ...process.env, VEIN_SETUP_VALUE: key } },
     );
+    // Don't silently succeed when persistence fails — the user thinks the key
+    // was saved, then claude fails auth on next launch with no clear cause.
+    if (!envResult.ok) {
+      return {
+        ok: false,
+        message: `CLIProxy key written to config.yaml but PowerShell persistence to User env failed: ${formatExecFailure(envResult)}`,
+      };
+    }
   }
 
   return { ok: true, message: `CLIProxy key generated: ${key.slice(0, 20)}...` };

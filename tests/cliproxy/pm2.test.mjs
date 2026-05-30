@@ -125,6 +125,25 @@ describe("start()", () => {
       "/usr/bin/claude",
       "--name",
       "cliproxy",
+      "--interpreter",
+      "none",
+    ]);
+  });
+
+  it("passes --interpreter none and --cwd when options are provided", async () => {
+    execArgs.mockResolvedValueOnce(ok(""));
+
+    await start("C:/x/cli-proxy-api.exe", { cwd: "C:/x" });
+
+    expect(execArgs).toHaveBeenCalledWith("pm2", [
+      "start",
+      "C:/x/cli-proxy-api.exe",
+      "--name",
+      "cliproxy",
+      "--interpreter",
+      "none",
+      "--cwd",
+      "C:/x",
     ]);
   });
 

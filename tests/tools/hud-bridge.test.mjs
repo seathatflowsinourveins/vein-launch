@@ -214,6 +214,8 @@ describe("poll()", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // No prior output file by default → carry-forward path is inert.
+    readFile.mockRejectedValue(new Error("ENOENT"));
   });
 
   it("writes valid JSON with all expected fields", async () => {
@@ -320,14 +322,43 @@ describe("poll()", () => {
     expect(() => new Date(out.updated_at).toISOString()).not.toThrow();
   });
 
-  it("resets_at timestamps are in the future", async () => {
+  it("resets_at is null when no usage-queue data is available", async () => {
     const fetcher = makeFetcher({ "/v0/management/auth-files": [] });
-    const before = Date.now();
 
     await poll({ config: baseConfig, fetcher, outputPath: TEST_OUTPUT });
 
     const out = parsedOutput();
-    expect(new Date(out.five_hour.resets_at).getTime()).toBeGreaterThan(before);
-    expect(new Date(out.seven_day.resets_at).getTime()).toBeGreaterThan(before);
+    expect(out.five_hour.resets_at).toBeNull();
+    expect(out.seven_day.resets_at).toBeNull();
+    expect(out.five_hour.used_percentage).toBe(0);
+  });
+
+  it("derives real quota + reset + active account from usage-queue headers", async () => {
+    const fetcher = makeFetcher({
+      "/v0/management/auth-files": [{ name: "acctA", status: "active", auth_index: "idA" }],
+      "/v0/management/usage-queue?count=200": [
+        {
+          auth_index: "idA",
+          timestamp: "2026-05-28T13:00:00",
+          tokens: { input_tokens: 31, cache_read_tokens: 1000 },
+          response_headers: {
+            "Anthropic-Ratelimit-Unified-5h-Utilization": ["0.25"],
+            "Anthropic-Ratelimit-Unified-5h-Reset": ["1780004400"],
+            "Anthropic-Ratelimit-Unified-7d-Utilization": ["0.05"],
+            "Anthropic-Ratelimit-Unified-7d-Reset": ["1780293600"],
+            "Anthropic-Ratelimit-Unified-Status": ["allowed"],
+          },
+        },
+      ],
+    });
+
+    await poll({ config: baseConfig, fetcher, outputPath: TEST_OUTPUT });
+
+    const out = parsedOutput();
+    expect(out.five_hour.used_percentage).toBe(25);
+    expect(out.seven_day.used_percentage).toBe(5);
+    expect(out.five_hour.resets_at).toBe(new Date(1780004400 * 1000).toISOString());
+    expect(out.seven_day.resets_at).toBe(new Date(1780293600 * 1000).toISOString());
+    expect(out.active_account).toBe("acctA");
   });
 });

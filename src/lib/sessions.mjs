@@ -6,6 +6,7 @@
  * so concurrent launches from different terminals never race on a single file.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -50,7 +51,7 @@ export async function createSession({ project, mode }) {
   }
 
   const session = {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     project,
     pid: process.pid,
     startedAt: new Date().toISOString(),

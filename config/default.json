@@ -46,7 +46,7 @@
   },
   "modelRouting": {
     "default": "opus",
-    "subagents": "claude-haiku-4-5",
+    "subagents": "",
     "planning": "opusplan"
   },
   "stateDir": "~/.vein",

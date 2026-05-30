@@ -67,13 +67,27 @@ async function nodeProbe(port) {
   });
 }
 
+// Port is interpolated into a shell pipeline; restrict to digits so a crafted
+// `target` cannot inject shell syntax (parity with SAFE_PATTERN for proc mode).
+const SAFE_PORT = /^\d{1,5}$/;
+
 function checkPort(port) {
+  if (!SAFE_PORT.test(String(port))) {
+    throw new Error(`unsafe port: ${JSON.stringify(port)} (allowed: 1-5 digits)`);
+  }
   const native = run(`netstat -ano | findstr ":${port} "`);
   const posix = run(`netstat -ano | grep ":${port} "`);
   return { native, posix };
 }
 
+// Pattern is interpolated into a shell pipeline; restrict to safe chars so
+// `node instrument-check.mjs proc "x; rm -rf /"` cannot inject shell syntax.
+const SAFE_PATTERN = /^[A-Za-z0-9._-]+$/;
+
 function checkProc(pattern) {
+  if (!SAFE_PATTERN.test(pattern)) {
+    throw new Error(`unsafe pattern: ${JSON.stringify(pattern)} (allowed: [A-Za-z0-9._-]+)`);
+  }
   const native = run(`tasklist | findstr /i ${pattern}`);
   const posix = run(`tasklist | grep -i ${pattern}`);
   return { native, posix };

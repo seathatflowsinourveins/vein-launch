@@ -21,3 +21,7 @@ agent-orchestrator.yaml
 .ao/
 # Wave 10.5: eval-history relocated to ~/.vein/eval-history/
 docs/eval-history.jsonl
+
+# runtime lock/db artifacts (added by system audit 2026-05-28)
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.db

@@ -2,18 +2,9 @@
  * Tier runner — executes tier sequence within mode budget.
  */
 
+import { loadTier } from "../tiers/index.mjs";
 import { evaluateBlockRules } from "./block-engine.mjs";
 import { createResult, Severity } from "./result.mjs";
-
-const TIER_MODULES = {
-  "t0-rtk": "../tiers/t0-rtk.mjs",
-  "t1-env": "../tiers/t1-env.mjs",
-  "t2-cliproxy": "../tiers/t2-cliproxy.mjs",
-  "t3-cli": "../tiers/t3-cli.mjs",
-  "t4-github": "../tiers/t4-github.mjs",
-  "t5-drift": "../tiers/t5-drift.mjs",
-  "t6-codegraph": "../tiers/t6-codegraph.mjs",
-};
 
 export async function runTiers(config) {
   const modeConfig = config.modes?.[config.mode];
@@ -46,7 +37,7 @@ export async function runTiers(config) {
     const tierBudget = budget - elapsed;
     const start = performance.now();
     try {
-      const mod = await import(TIER_MODULES[tierId]);
+      const mod = await loadTier(tierId);
       const result = await runWithTimeout(
         () => mod.check(config, { budget: tierBudget, mode: config.mode }),
         tierBudget,

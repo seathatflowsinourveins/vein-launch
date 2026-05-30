@@ -40,7 +40,15 @@
           "maximum": 65535,
           "default": 8317
         },
-        "sessionAffinity": { "type": "boolean", "default": true }
+        "sessionAffinity": { "type": "boolean", "default": true },
+        "binaryPath": {
+          "type": "string",
+          "description": "Path to the cli-proxy-api binary. Defaults to 'cli-proxy-api' (resolved on PATH)."
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Working directory for the proxy process; the proxy reads ./config.yaml relative to it."
+        }
       },
       "additionalProperties": false
     },
@@ -63,7 +71,7 @@
       "type": "object",
       "properties": {
         "default": { "type": "string", "default": "opus" },
-        "subagents": { "type": "string", "default": "haiku" },
+        "subagents": { "type": "string", "default": "" },
         "planning": { "type": "string", "default": "opusplan" }
       },
       "additionalProperties": false

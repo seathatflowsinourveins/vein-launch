@@ -47,7 +47,7 @@ export async function startProxy(config) {
   if (!provider) return { ok: false, message: "CLIProxy not configured" };
   if (config.cliproxy.hosting === "pm2") {
     const binaryPath = config.cliproxy.binaryPath ?? "cli-proxy-api";
-    return provider.start(binaryPath);
+    return provider.start(binaryPath, { cwd: config.cliproxy.cwd });
   }
   return provider.start();
 }

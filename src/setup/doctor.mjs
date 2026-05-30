@@ -193,14 +193,20 @@ async function checkDeepModeRun(veinDir) {
     };
   }
 
-  const results = Array.isArray(data.results) ? data.results : [];
+  // Production persist.mjs writes the per-run tier list under `tiers`; older test
+  // fixtures used `results`. Accept either so prod-shape runs aren't silently mis-counted.
+  const tiers = Array.isArray(data.tiers)
+    ? data.tiers
+    : Array.isArray(data.results)
+      ? data.results
+      : [];
   const qualifies =
-    results.length >= 7 && !results.some((x) => x.severity === "error" || x.severity === "block");
+    tiers.length >= 7 && !tiers.some((x) => x.severity === "error" || x.severity === "block");
   if (!qualifies) {
     return {
       name: "deep-mode-run",
       status: "warn",
-      message: `last run had fewer than 7 qualifying tiers: PARTIAL:${results.length}`,
+      message: `last run had fewer than 7 qualifying tiers: PARTIAL:${tiers.length}`,
     };
   }
 
